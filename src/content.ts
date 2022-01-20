@@ -1,4 +1,8 @@
-import { TByte } from "./constant"
+export type TContentType = 'PROPOSAL' | 'THREAD' | 'VOTE' | 'REWARD'
+export type TProposalType = 'COSTS' | 'APPLICATION' | 'CONSTITUTION' 
+export type TThreadType = 'THREAD' | 'RETHREAD'
+export type TVoteType = 'ACCEPTED' | 'DECLINED'
+export type TCostProposalType = 'THREAD_PRICE' | 'PROPOSAL_PRICE'
 
 //Kind
 export const EMPTY_CODE = 0x00    //0
@@ -45,85 +49,3 @@ export const REWARD__CAT_DEPTH_1 = 3
 export const VOTE__CAT_DEPTH_1 = CONTENT_DEPTH_1_LENGTH
 export const VOTE_ACCEPTED__CAT_DEPTH_2 = 1
 export const VOTE_DECLINED__CAT_DEPTH_2 = VOTE_DEPTH_2_LENGTH
-
-export const CategoryDepth1ToString = (category: number): string => {
-	switch (category) {
-	case PROPOSAL__CAT_DEPTH_1:
-		return "PROPOSAL"
-	case THREAD__CAT_DEPTH_1:
-		return "THREAD"
-	case REWARD__CAT_DEPTH_1:
-		return "REWARD"
-	case VOTE__CAT_DEPTH_1:
-		return "VOTE"
-	}
-	return ""
-}
-
-export const CategoryDepth2ToString = (category1: number, category2: number): string => {
-
-	if (category1 == PROPOSAL__CAT_DEPTH_1) {
-
-		switch (category2) {
-		case PROPOSAL_APPLICATION__CAT_DEPTH_2:
-			return "APPLICATION"
-
-		case PROPOSAL_COST__CAT_DEPTH_2:
-			return "COSTS"
-
-		case PROPOSAL_CONSTITUTION__CAT_DEPTH_2:
-			return "CONSTITUTION"
-		}
-
-	} else if (category1 == THREAD__CAT_DEPTH_1) {
-
-		switch (category2) {
-		case THREAD_THREAD__CAT_DEPTH_2:
-			return "THREAD"
-
-		case THREAD_RETHREAD__CAT_DEPTH_2:
-			return "RETHREAD"
-		}
-
-	} else if (category1 == VOTE__CAT_DEPTH_1) {
-
-		switch (category2) {
-		case VOTE_ACCEPTED__CAT_DEPTH_2:
-			return "ACCEPTED"
-
-		case VOTE_DECLINED__CAT_DEPTH_2:
-			return "DECLINED"
-		}
-	}
-	return ""
-}
-
-export const CategoryDepth3ToString = (category1: number, category2: number, category3: number): string => {
-
-	if (category1 == PROPOSAL__CAT_DEPTH_1) {
-		if (category2 == PROPOSAL_COST__CAT_DEPTH_2) {
-			switch (category3) {
-			case PROPOSAL_COST_THREAD__CAT_DEPTH_3:
-				return "THREAD_PRICE"
-
-			case PROPOSAL_COST_PROPOSAL__CAT_DEPTH_3:
-				return "PROPOSAL_PRICE"
-			}
-		}
-	}
-	return ""
-}
-
-export const KindString = (k: TByte): string => {
-	switch (k) {
-	case PROPOSAL_CODE:
-		return "proposal"
-	case THREAD_CODE:
-		return "thread"
-	case VOTE_CODE:
-		return "vote"
-	case REWARD_CODE:
-		return "reward"
-	}
-	return "regular"
-}

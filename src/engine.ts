@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer'
+
 import { 
     APPLICATION_PROPOSAL_SCRIPT_LENGTH, CONSTITUTION_PROPOSAL_SCRIPT_LENGTH, 
     MAX_CONSTITUTION_RULE, MAX_TX_OUTPUT, MAX_UNIT_WRITING_COST, PUBKEY_H_BURNER, 
@@ -16,7 +18,7 @@ import {
     THREAD_THREAD__CAT_DEPTH_2, THREAD__CAT_DEPTH_1,
     THREAD_RETHREAD__CAT_DEPTH_2, REWARD__CAT_DEPTH_1,
     VOTE_DECLINED__CAT_DEPTH_2, VOTE_ACCEPTED__CAT_DEPTH_2,
-    VOTE__CAT_DEPTH_1, TOTAL_MAX_LENGTH, COST_PROPOSAL_CAT_LIST, PROPOSAL_CODE, THREAD_CODE, REWARD_CODE, VOTE_CODE, EMPTY_CODE, CategoryDepth3ToString, CategoryDepth2ToString, CategoryDepth1ToString
+    VOTE__CAT_DEPTH_1, TOTAL_MAX_LENGTH, COST_PROPOSAL_CAT_LIST, PROPOSAL_CODE, THREAD_CODE, REWARD_CODE, VOTE_CODE, EMPTY_CODE, TContentType, TThreadType, TVoteType, TProposalType, TCostProposalType
 } from './content'
 
 import {
@@ -30,7 +32,7 @@ import { DeserializeConstitution, SerialConstitution, TConstitution } from "./co
 
 export default class ScriptEngineV2 {
 
-    static categoryDepth1ToString = (category: number): string => {
+    static categoryDepth1ToString = (category: number): TContentType | null => {
         switch (category) {
         case PROPOSAL__CAT_DEPTH_1:
             return "PROPOSAL"
@@ -41,10 +43,10 @@ export default class ScriptEngineV2 {
         case VOTE__CAT_DEPTH_1:
             return "VOTE"
         }
-        return ""
+        return null
     }
 
-    static categoryDepth2ToString = (category1: number, category2: number): string => {
+    static categoryDepth2ToString = (category1: number, category2: number): TProposalType | TThreadType | TVoteType | null => {
 
         if (category1 == PROPOSAL__CAT_DEPTH_1) {
     
@@ -79,10 +81,10 @@ export default class ScriptEngineV2 {
                 return "DECLINED"
             }
         }
-        return ""
+        return null
     }
 
-    static categoryDepth3ToString = (category1: number, category2: number, category3: number): string => {
+    static categoryDepth3ToString = (category1: number, category2: number, category3: number): TCostProposalType | null => {
 
         if (category1 == PROPOSAL__CAT_DEPTH_1) {
             if (category2 == PROPOSAL_COST__CAT_DEPTH_2) {
@@ -95,7 +97,7 @@ export default class ScriptEngineV2 {
                 }
             }
         }
-        return ""
+        return null
     }
 
     private _script: Buffer[]
@@ -110,7 +112,7 @@ export default class ScriptEngineV2 {
 
     public set = (script: Buffer[]) => this._script = script
 
-    public kind = () => {
+    public scriptType = () => {
         if (this.is().proposalScript())
             return PROPOSAL_CODE
         if (this.is().threadDepth1Script())
@@ -123,19 +125,31 @@ export default class ScriptEngineV2 {
         return EMPTY_CODE
     }
 
-    public kindString = () => {
-        switch (this.kind()) {
+    public scriptTypeString = (): TContentType | 'REGULAR' => {
+        switch (this.scriptType()) {
             case PROPOSAL_CODE:
-                return "proposal"
+                return "PROPOSAL"
             case THREAD_CODE:
-                return "thread"
+                return "THREAD"
             case VOTE_CODE:
-                return "vote"
+                return "VOTE"
             case REWARD_CODE:
-                return "reward"
+                return "REWARD"
             }
-            return "regular"
+            return "REGULAR"
     }
+
+    public proposalContentTypeString = (): TProposalType | null => {
+        if (this.is().proposalScript()){
+            if (this.is().constitutionProposalScript())
+                return 'CONSTITUTION'
+            if (this.is().costProposalScript())
+                return 'COSTS'
+            if (this.is().applicationProposalScript())
+                return 'APPLICATION'
+        }
+        return null
+    } 
 
     public append = () => {
         
@@ -153,6 +167,7 @@ export default class ScriptEngineV2 {
             bytes(contentPKH)            
             return true
         }
+
         const contentOPCode = () => byte(OP_CONTENT)
 
         const lockScript = (pubKeyHash: Buffer): ScriptEngineV2 => {
@@ -262,7 +277,6 @@ export default class ScriptEngineV2 {
                 return this._parse().nonceAtIndex(0)
             }
             throw NOT_A_TARGETABLE_CONTENT
-
         }
 
         const PKHFromLockScript = (): Buffer => {
@@ -282,10 +296,10 @@ export default class ScriptEngineV2 {
 
         const targetPKHFromContentScript = (): Buffer => {
             if (this.is().voteScript() || this.is().rewardScript()){
-                this.bytes()[0]
+                return this.bytes()[0]
             }
             if (this.is().rethreadScript()){
-                this.bytes()[2]
+                return this.bytes()[2]
             }
             throw NOT_A_TARGETING_CONTENT
         }
@@ -622,6 +636,10 @@ export default class ScriptEngineV2 {
 
 
     toString = () => {
+        const { 
+            categoryDepth1ToString, categoryDepth2ToString, categoryDepth3ToString
+        } = ScriptEngineV2
+
 
         const {
             contentCategoryAtIndex,
@@ -636,14 +654,14 @@ export default class ScriptEngineV2 {
                 i = 2
                 if (this.is().costProposalScript()){
                     while (this.bytes()[i].length == 8){
-                        str += `${DecodeInt(this.bytes()[i], false).toLocaleString()} ${CategoryDepth3ToString(PROPOSAL__CAT_DEPTH_1, PROPOSAL_COST__CAT_DEPTH_2, contentCategoryAtIndex(i+1 as TByte))} `
+                        str += `${DecodeInt(this.bytes()[i], false).toLocaleString()} ${categoryDepth3ToString(PROPOSAL__CAT_DEPTH_1, PROPOSAL_COST__CAT_DEPTH_2, contentCategoryAtIndex(i+1 as TByte))} `
                         i += 2
                     }
                 } else if (this.is().constitutionProposalScript()){
                     str += `CONSTITUTION_SHA256_${Sha256(this.bytes()[i]).toString('hex')} `
                     i++
                 }
-                str += `${CategoryDepth2ToString(contentCategoryAtIndex(i+1 as TByte), contentCategoryAtIndex(i as TByte))} `
+                str += `${categoryDepth2ToString(contentCategoryAtIndex(i+1 as TByte), contentCategoryAtIndex(i as TByte))} `
                 i++
             } else if (this.is().threadDepth1Script()){
                 str = `NONCE: ${this._parse().nonceAtIndex(0)} PKH: ${this.bytes()[1].toString('hex')} `
@@ -652,19 +670,19 @@ export default class ScriptEngineV2 {
                     str += `TARGET_CONTENT_PKH_${this.bytes()[i].toString('hex')} ` 
                     i++
                 }
-                str += `${CategoryDepth2ToString(contentCategoryAtIndex(i+1 as TByte), contentCategoryAtIndex(i as TByte))} `
+                str += `${categoryDepth2ToString(contentCategoryAtIndex(i+1 as TByte), contentCategoryAtIndex(i as TByte))} `
                 i++
             } else if (this.is().rewardScript()){
                 str = `THREAD_PKH_${this.bytes()[0].toString('hex')} VOUT_REDIS_${Number(this.bytes()[i][0])}`
-                str += ` ${CategoryDepth2ToString( REWARD__CAT_DEPTH_1, contentCategoryAtIndex(1) )} `
+                str += ` ${categoryDepth2ToString( REWARD__CAT_DEPTH_1, contentCategoryAtIndex(1) )} `
                 i = 2
             } else if (this.is().voteScript()){
                 str = `PROPOSAL_PKH_${this.bytes()[0].toString('hex')}`
-                str += ` ${CategoryDepth2ToString( VOTE__CAT_DEPTH_1, contentCategoryAtIndex(1) )} `
+                str += ` ${categoryDepth2ToString( VOTE__CAT_DEPTH_1, contentCategoryAtIndex(1) )} `
                 i = 2
             }
 
-            str += `${CategoryDepth1ToString(contentCategoryAtIndex(i as TByte))} `
+            str += `${categoryDepth1ToString(contentCategoryAtIndex(i as TByte))} `
             i++
             str += OpcodeToString(opcodeAtIndex(i as TByte))
             return str

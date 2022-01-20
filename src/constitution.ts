@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer'
+
 import { MAX_CONSTITUTION_RULE } from "./constant"
 import { WRONG_CONSTITUTION_LENGTH } from "./errors"
 
@@ -8,7 +10,7 @@ export interface IConstitutionRule {
 
 export type TConstitution = IConstitutionRule[]
 
-export const NewConstitution = () => {
+export const NewConstitution = (): TConstitution => {
     const consti: TConstitution = []
     for (let i = 0; i < MAX_CONSTITUTION_RULE; i++)
         consti.push({ title: "\r", content: "\r" })
