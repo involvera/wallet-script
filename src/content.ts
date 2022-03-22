@@ -1,4 +1,5 @@
 export type TContentType = 'PROPOSAL' | 'THREAD' | 'VOTE' | 'REWARD'
+export type TPubKHContent = 'PROPOSAL' | 'THREAD'
 export type TProposalType = 'COSTS' | 'APPLICATION' | 'CONSTITUTION' 
 export type TThreadType = 'THREAD' | 'RETHREAD'
 export type TVoteType = 'ACCEPTED' | 'DECLINED'

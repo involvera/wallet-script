@@ -1,4 +1,13 @@
 export { TByte } from './src/constant'
+export {
+    TContentType,
+    TPubKHContent,
+    TProposalType,
+    TThreadType,
+    TVoteType,
+    TCostProposalType
+ } from './src/content'
+
 import * as Constant from './src/constant'
 import ScriptEngine from './src/engine'
 import * as Opcode from './src/opcode'
