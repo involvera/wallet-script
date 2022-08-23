@@ -17,7 +17,7 @@ export const NewConstitution = (): TConstitution => {
 	return consti
 }
 
-export const SerialConstitution = (consti: TConstitution) => {
+export const SerializeConstitution = (consti: TConstitution) => {
 	let ret = Buffer.from([])
 	for (let i = 0; i < consti.length; i++){
 		ret = Buffer.concat([ret, Buffer.from(consti[i].title + '\n')])
