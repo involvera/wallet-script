@@ -4,9 +4,13 @@ import Opcode, {T_OPCODE} from './opcode'
 import ContentCode, { T_CODE_NAME } from './content-code'
 import { OP_CHECKSIG, OP_CONTENT, OP_DUP, OP_EQUALVERIFY, OP_HASH160 } from '../opcode'
 import { SerializeConstitution, TConstitution } from '../constitution'
-import { TByte } from '../constant'
+import { APPLICATION_PROPOSAL_SCRIPT_LENGTH, LOCK_SCRIPT_LENGTH, MAX_CONSTITUTION_RULE, MAX_COST_PROPOSAL_SCRIPT_LENGTH, MAX_TX_OUTPUT, MAX_UNIT_WRITING_COST, PUBKEY_H_BURNER, TByte, UNLOCKING_SCRIPT_LENGTH } from '../constant'
+import { NOT_A_CONSTITUTION_PROPOSAL, NOT_A_COST_PROPOSAL, NOT_A_LOCK_SCRIPT, NOT_A_REWARD_SCRIPT, NOT_A_TARGETABLE_CONTENT, NOT_A_TARGETING_CONTENT, WRONG_LOCK_SCRIPT } from '../errors'
 
-export default class Script extends Array<Command> {
+
+class Script extends Array<Command> {
+
+    static sizes = () => SCRIPT_LENGTH
 
     static build = () => {
 
@@ -142,6 +146,346 @@ export default class Script extends Array<Command> {
         }
     }
 
+
+    parse = () => {
+        const contentNonce = () => {
+            if (this.is().onlyTargetableContentScript())
+                return this[0].to().int().number()
+            throw NOT_A_TARGETABLE_CONTENT
+        }
+
+        const PKHFromLockScript = (): Inv.PubKH => {
+            if(this.is().lockScript())
+                return this[2].format().pubKH()
+            if (this.is().contentScript())
+                return Inv.PubKH.fromHex(PUBKEY_H_BURNER)
+            throw NOT_A_LOCK_SCRIPT
+        }
+
+        const PKHFromContentScript = (): Inv.PubKH => {
+            if (this.is().onlyTargetableContentScript() && this.is().targetingAndTargetableContentScript())
+                return this[1].format().pubKH()
+            throw NOT_A_TARGETABLE_CONTENT
+        }
+
+        const targetPKHFromContentScript = (): Inv.PubKH => {
+            if (this.is().onlyTargetingContentScript())
+                return this[0].format().pubKH()
+            if (this.is().targetingAndTargetableContentScript())
+                return this[2].format().pubKH()
+            throw NOT_A_TARGETING_CONTENT
+        }
+
+        const constitution = () => {
+            if (this.is().constitutionProposalScript())
+                return this[2].constitution()
+            throw NOT_A_CONSTITUTION_PROPOSAL
+        }
+
+        const proposalCosts = () => {
+            if (this.is().costProposalScript()){
+                let thread = BigInt(-1)
+                let proposal = BigInt(-1)
+                let i = 2
+                while (this[i].length() === 8){
+                    const price = this[i].to().int().big()
+                    const cat = this[i].getCodeAs().content()
+                    if (cat.eq('PROPOSAL', 'COSTS', "PROPOSAL_PRICE"))
+                        proposal = BigInt(price as any)
+                    if (cat.eq('PROPOSAL', 'COSTS', 'THREAD_PRICE'))
+                        thread = BigInt(price as any)
+                    i += 2
+                }
+                return { thread, proposal}
+            }
+            throw NOT_A_COST_PROPOSAL
+        }
+
+        const distributionVout = () => {
+            if (this.is().rewardScript())
+                return this[1].to().int()
+            throw NOT_A_REWARD_SCRIPT
+        }
+
+        return {
+            contentNonce,
+            PKHFromLockScript,
+            PKHFromContentScript,
+            targetPKHFromContentScript,
+            constitution,
+            proposalCosts,
+            distributionVout
+        }
+    }
+
+    is = () => {
+        const lockScript = () => {
+             try {
+                return this.length === Script.sizes().LOCK && 
+                this[0].getCodeAs().op().eq(OP_DUP) && 
+                this[1].getCodeAs().op().eq(OP_DUP) && 
+                this[2].format().pubKH() && 
+                this[3].getCodeAs().op().eq(OP_EQUALVERIFY) && 
+                this[4].getCodeAs().op().eq(OP_CHECKSIG)
+             } catch (e){
+                return false
+             }
+        }
+
+        const unlockScript = () => {
+            try {
+               return this.length === Script.sizes().UNLOCK && 
+               !!this[0].format().signature() &&
+               !!this[1].format().pubKH()
+            } catch (e){
+               return false
+            }
+       }
+
+       const targetingAndTargetableContentScript = () => {
+            try {
+                return this.is().contentScript() && 
+                this[0].to().int(false) > Inv.InvBigInt.fromNumber(0) &&
+                !!this[1].format().pubKH() &&
+                !!this[2].format().pubKH()                 
+            } catch (e){
+                return false
+            }
+       }
+
+       const onlyTargetingContentScript = () => {
+            try {
+                return !targetingAndTargetableContentScript() &&
+                this.is().contentScript() &&
+                !!this[0].format().pubKH()
+            } catch(e){
+                return false
+            }
+       }
+
+       const onlyTargetableContentScript = () => {
+            try {
+                return !targetingAndTargetableContentScript() &&
+                this.is().contentScript() && 
+                this[0].to().int(false) > Inv.InvBigInt.fromNumber(0) &&
+                !!this[1].format().pubKH()
+            } catch (e){
+                return false
+            }
+       }
+
+       const contentScript = () => {
+            try {
+                return this[this.length-1].getCodeAs().op().eq(OP_CONTENT) && 
+                this
+            } catch (e){
+                return false
+            }
+       }
+
+       const proposalScript = (): boolean => {
+            try {
+                return this.is().onlyTargetableContentScript() &&
+                this.length >= Script.sizes().APPLICATION_PROPOSAL &&
+                this.length <= Script.sizes().COST_PROPOSAL_MAX 
+            } catch (e){
+                return false
+            }
+        }
+
+        const applicationProposalScript = (): boolean => {
+            try {
+                return this.is().proposalScript() &&
+                this.length === Script.sizes().APPLICATION_PROPOSAL &&
+                this[2].getCodeAs().content().eq('PROPOSAL', 'APPLICATION')
+            } catch (e){
+                return false
+            }
+        }
+
+        const costProposalScript = (): boolean => {
+            try {
+                if (this.is().proposalScript() && this.length === Script.sizes().COST_PROPOSAL_MIN || this.length === Script.sizes().COST_PROPOSAL_MAX){
+                    let i = 2
+                    while (this[i].length() == 8){
+                        const cost = this[i].to().int().big()
+                        if (cost <= BigInt(0) || cost > BigInt(MAX_UNIT_WRITING_COST)){
+                             return false
+                        }
+                        const cat = this[i+1].getCodeAs().content()
+                        if (!cat.is().inMotherCategory('PROPOSAL', 'COSTS'))
+                            return false
+                        i += 2
+                    }
+                    return this[i].getCodeAs().content().eq('PROPOSAL', 'COSTS')
+                }
+                return false
+            } catch (e){
+                return false
+            }
+        }
+
+        const constitutionProposalScript = (): boolean => {
+            try {
+                return this.is().proposalScript() &&
+                this.length === Script.sizes().CONSTITUTION_PROPOSAL &&
+                this[2].constitution().length === MAX_CONSTITUTION_RULE
+            } catch (e){
+                return false
+            }
+        }
+
+        const threadD1Script = (): boolean => {
+            try {
+                return this.is().onlyTargetableContentScript() &&
+                (this.length === Script.sizes().THREAD || this.length === Script.sizes().RETHREAD) &&
+                this[this.length-2].getCodeAs().content().eq('THREAD')
+            } catch (e){
+                return false
+            }
+        }
+
+        const threadD2Script = (): boolean => {
+            try {
+                return this.is().threadD1Script() &&
+                this.length === Script.sizes().THREAD && 
+                this[this.length-3].getCodeAs().content().eq('THREAD', 'THREAD')                 
+            } catch (e){
+                return false
+            }
+        }
+
+        const rethreadD2Script = (): boolean => {
+            try {
+                return this.is().threadD1Script() &&
+                this.length === Script.sizes().RETHREAD && 
+                !!this[2].format().pubKH() &&
+                this[this.length-3].getCodeAs().content().eq('THREAD', 'RETHREAD')                 
+            } catch (e){
+                return false
+            }
+        }
+
+        const rewardScript = (): boolean => {
+            try {
+                const voutRedistribution = this[1].to().int(true).number()
+                return this.is().onlyTargetingContentScript() &&
+                this.length === Script.sizes().REWARD &&
+                voutRedistribution >= 0 && voutRedistribution <= MAX_TX_OUTPUT-1 &&
+                this[2].getCodeAs().content().eq('REWARD')
+            } catch(e){ 
+                return false
+            }
+        }
+
+        const voteScript = (): boolean => {
+            try {
+                return this.is().onlyTargetingContentScript() &&
+                this.length === Script.sizes().VOTE &&
+                this[1].getCodeAs().content().is().inMotherCategory('VOTE') &&
+                !!this[2].getCodeAs().content().eq('VOTE')
+            } catch(e){ 
+                return false
+            }
+        }
+
+        return {
+            lockScript,
+            unlockScript,
+            contentScript,
+            onlyTargetableContentScript,
+            onlyTargetingContentScript,
+            targetingAndTargetableContentScript,
+            proposalScript,
+            applicationProposalScript,
+            costProposalScript,
+            constitutionProposalScript,
+            threadD1Script,
+            threadD2Script,
+            rethreadD2Script,
+            rewardScript,
+            voteScript
+        }
+    }
     toBase64 = () => this.map((e: Command) => e.toBase64())
     toBytes = () => this.map((e: Command) => e.bytes())
+
+    toString(): string {
+
+        const nonce = (index: number) => this[index].to().int().number()
+        const contentCode = (index: number) => this[index].getCodeAs().content().name
+        const opcode = (index: number) => this[index].getCodeAs().op().toString()
+        const pkh = (index:number) => this[index].format().pubKH().to().string().hex()
+        const sig = (index:number) => this[index].format().signature().to().string().hex()
+        const pubk = (index:number) => this[index].format().pubK().to().string().hex()
+        const amount = (index: number) => this[index].to().int().big().toLocaleString()
+
+
+        if (this.is().contentScript()){
+            let i = 0
+            let str = ''
+            if (this.is().proposalScript()){
+                str = `NONCE_${nonce(0)} PKH_${pkh(1)} `
+                i = 2
+                if (this.is().costProposalScript()){
+                    while (this[i].length() == 8){
+                        str += `${amount(i)} ${contentCode(i+1)} `
+                        i += 2
+                    }
+                } else if (this.is().constitutionProposalScript()){
+                    str += `CONSTITUTION_${this[i].constitution()}`
+                    i++
+                }
+                str += `${contentCode(i+1)} `
+                i++
+            } else if (this.is().threadD1Script()){
+                str = `NONCE: ${nonce(0)} PKH: ${pkh(1)} `
+                i = 2
+                if (this.is().rethreadD2Script()){
+                    str += `TARGET_CONTENT_PKH_${pkh(i)} ` 
+                    i++
+                }
+                str += `${contentCode(i+1)} `
+                i++
+            } else if (this.is().rewardScript()){
+                str = `THREAD_PKH_${pkh(0)} VOUT_REDIS_${nonce(i)}`
+                str += ` ${contentCode(1)} `
+                i = 2
+            } else if (this.is().voteScript()){
+                str = `PROPOSAL_PKH_${pkh(0)}`
+                str += ` ${contentCode(1)} `
+                i = 2
+            }
+
+            str += `${contentCode(i)} `
+            i++
+            str += opcode(i)
+            return str
+        }
+
+        if (this.is().lockScript()){
+            return `${opcode(0)} ${opcode(1)} ${pkh(2)} ${opcode(3)} ${opcode(4)}`
+        }
+
+        if (this.is().unlockScript()){
+            return `SIGNATURE_${sig(0)} PUBLIC_KEY_${pubk(1)}`
+        }
+
+        return  ''
+    }
+
+
+}
+
+const SCRIPT_LENGTH = {
+    LOCK: Script.build().lockScript(Inv.PubKH.random()).length,
+    UNLOCK: Script.build().unlockScript(Inv.Signature.random(), Inv.PubKey.random()).length,
+    APPLICATION_PROPOSAL: Script.build().applicationProposal(1, Inv.PubKH.random()).length,
+    COST_PROPOSAL_MIN: Script.build().costProposalScript(1, Inv.PubKH.random(), Inv.InvBigInt.fromNumber(-1), Inv.InvBigInt.fromNumber(5000)).length,
+    COST_PROPOSAL_MAX: Script.build().costProposalScript(1, Inv.PubKH.random(), Inv.InvBigInt.fromNumber(5000), Inv.InvBigInt.fromNumber(5000)).length,
+    CONSTITUTION_PROPOSAL: Script.build().constitutionProposalScript(1, Inv.PubKH.random(), [{title: 'Title', content: 'Rule'}]).length,
+    THREAD: Script.build().threadScript(1, Inv.PubKH.random()).length,
+    RETHREAD: Script.build().rethreadScript(1, Inv.PubKH.random(), Inv.PubKH.random()).length,
+    REWARD: Script.build().rewardScript(Inv.PubKH.random(), 3).length,
+    VOTE: Script.build().voteScript(Inv.PubKH.random(), true).length
 }

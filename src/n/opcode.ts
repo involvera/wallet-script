@@ -20,6 +20,8 @@ export default class Opcode {
     get = () => this.opcode
     bytes = () => new Uint8Array([this.get()])
 
+    eq = (code: T_OPCODE) => this.get() === code
+
     toString = (): T_OPCODE_STR => {
         switch (this.get()) {
             case OP_CHECKSIG:

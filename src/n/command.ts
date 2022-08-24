@@ -1,10 +1,11 @@
 import { Inv } from 'wallet-util'
 import Opcode from './opcode'
 import ContentCode from './content-code'
+import { DeserializeConstitution } from '../constitution'
 
 export type TCommand = Uint8Array | number[] | Command | Opcode | ContentCode | Inv.InvBuffer
 
-export default class Command {
+export default class Command extends Inv.InvBuffer {
 
     static fromBase64 = (str: string) => new Command(Inv.InvBuffer.from64(str))
 
@@ -27,9 +28,8 @@ export default class Command {
             return new Uint8Array(elem)
     }
 
-    private elem: Uint8Array
     constructor(elem: TCommand){
-        this.elem = Command.toUint8Array(elem)
+        super(Command.toUint8Array(elem))
     }
 
     assert = () => {
@@ -42,24 +42,37 @@ export default class Command {
         }
     }
 
-    bytes = () => this.elem
     length = () => this.bytes().length
+    codeValue = () => {
+        this.assert().isCode()
+        return this.bytes()[0]
+    }
  
     is = () => {
         return {
             code: () => this.length() === 1,
+            opcode: () => {
+                if (this.is().code()){
+                    try {
+                        this.getCodeAs().op()
+                        return true
+                    } catch (e){
+                        return false
+                    }
+                }
+                return false
+            },
+            contentCode: () => this.is().code() && this.codeValue() > 0 && this.codeValue() <= ContentCode.MaxValue
         }
     }
 
+    constitution = () => DeserializeConstitution(this.bytes()) 
+
     getCodeAs = () => {
         return {
-            ops: () =>{
-                this.assert().isCode()
-                new Opcode(this.bytes()[0] as any)
-            },
+            op: () => new Opcode(this.codeValue() as any),
             content: () => {
-                this.assert().isCode()
-                new ContentCode(this.bytes()[0] as any)
+               return new ContentCode(this.codeValue() as any)
             }
         }
     }

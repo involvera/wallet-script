@@ -8,7 +8,6 @@ export type TThreadType = 'THREAD' | 'RETHREAD'
 export type TVoteType = 'ACCEPTED' | 'DECLINED'
 export type TCostProposalType = 'THREAD_PRICE' | 'PROPOSAL_PRICE'
 
-
 export type T_CODE_NAME = TContentType | TPubKHContent | TProposalType | TThreadType | TVoteType | TCostProposalType
 
 interface TCode {
@@ -85,6 +84,27 @@ const CONTENT_CODES: TCode[] = [
 
 export default class ContentCode {
 
+    static fromPathValues = (...path: number[]) => {
+        let book = CONTENT_CODES
+        const ret: T_CODE_NAME[] = []
+
+        for (let i = 0; i < path.length; i++){
+            const value = path[i]
+            if (!book)
+                throw new Error(`name ${value} (depth: ${i}) doesn't match with any content code`)
+            const e = _.find(book, {value}) as TCode | undefined
+            if (!e)
+                throw new Error(`name ${value} (depth: ${i}) doesn't match with any content code`)
+            if (e.depth)
+                book = _.cloneDeep(e.depth)
+            delete e.depth
+            ret.push(e.name)
+        }
+        return new ContentCode(...ret)
+    }
+
+    static MaxValue = CONTENT_CODES.length
+
     private _path: T_CODE_NAME[]
     constructor(...path: T_CODE_NAME[]){
         this._path = path
@@ -102,6 +122,27 @@ export default class ContentCode {
         }
         return ret
     }
+
+    is = () => {
+        const inMotherCategory = (...motherCategoryPath: T_CODE_NAME[]) => {
+            const children = new ContentCode(...motherCategoryPath).depth()
+            if (children){
+                const elem = this.getLastElement()
+                for (const child of children){
+                    if (child.name === elem.name && child.value === elem.value)
+                        return true
+                }
+            }
+
+            return false
+
+        }
+        return {
+            inMotherCategory
+        }
+    }
+
+    eq = (...path: T_CODE_NAME[]) => _.isEqual(this.getLastElement(), new ContentCode(...path).getLastElement())
 
     name = () => this.getLastElement().name
     code = () => this.getLastElement().value
@@ -126,7 +167,7 @@ export default class ContentCode {
                 throw new Error(`name ${name} (depth: ${i}) doesn't match with any content code`)
             if (e.depth)
                 book = _.cloneDeep(e.depth)
-            delete e.depth
+            this._path[i+1] && delete e.depth
             ret.push(e)
         }
         return ret
