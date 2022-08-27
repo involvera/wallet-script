@@ -1,7 +1,14 @@
-import { Buffer } from 'buffer'
-
+import { Lib, Inv } from 'wallet-util'
 import { MAX_CONSTITUTION_RULE } from "./constant"
 import { WRONG_CONSTITUTION_LENGTH } from "./errors"
+
+const {
+	ConcatBytes
+} = Lib.Hash
+
+const {
+	InvBuffer
+} = Inv
 
 export interface IConstitutionRule {
     title: string
@@ -17,20 +24,20 @@ export const NewConstitution = (): TConstitution => {
 	return consti
 }
 
-export const SerializeConstitution = (consti: TConstitution) => {
-	let ret = Buffer.from([])
+export const SerializeConstitution = (consti: TConstitution): Inv.InvBuffer => {
+	let ret: string = ''
 	for (let i = 0; i < consti.length; i++){
-		ret = Buffer.concat([ret, Buffer.from(consti[i].title + '\n')])
-		ret = Buffer.concat([ret, Buffer.from(consti[i].content)])
+		ret += consti[i].title + '\n'
+		ret += consti[i].content
 		if (i < MAX_CONSTITUTION_RULE-1)
-			ret = Buffer.concat([ret, Buffer.from('\n\n')])
+			ret += '\n\n'
 	}
-	return ret
+	return Inv.InvBuffer.fromRaw(ret)
 }
 
-export const DeserializeConstitution = (serialized: Buffer) => {
+export const DeserializeConstitution = (serialized: Inv.InvBuffer) => {
 	const c = NewConstitution()
-	const strSerial = serialized.toString()
+	const strSerial = serialized.to().string().raw()
 	let list = strSerial.split('\n\n')
 
 	if (list.length > MAX_CONSTITUTION_RULE)

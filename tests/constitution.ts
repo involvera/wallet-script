@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import 'mocha';
 import { MAX_CONSTITUTION_RULE } from '../src/constant';
-import { DeserializeConstitution, NewConstitution, SerialConstitution } from '../src/constitution';
+import { DeserializeConstitution, NewConstitution, SerializeConstitution } from '../src/constitution';
 
 describe('Testing Constitution', () => {
 
@@ -22,7 +22,7 @@ describe('Testing Constitution', () => {
             char += 2
         }
         const copyString = JSON.stringify(c)
-        const serial = SerialConstitution(c)
+        const serial = SerializeConstitution(c)
         expect(copyString).to.eq(JSON.stringify(DeserializeConstitution(serial)))
     })
 })

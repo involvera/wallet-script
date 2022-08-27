@@ -1,7 +1,8 @@
 import { Inv } from 'wallet-util'
+import _ from 'lodash'
 import Opcode from './opcode'
-import ContentCode from './content-code'
-import { DeserializeConstitution } from '../constitution'
+import ContentCode, { T_CODE_NAME } from './content-code'
+import { DeserializeConstitution } from './constitution'
 
 export type TCommand = Uint8Array | number[] | Command | Opcode | ContentCode | Inv.InvBuffer
 
@@ -66,16 +67,31 @@ export default class Command extends Inv.InvBuffer {
         }
     }
 
-    constitution = () => DeserializeConstitution(this.bytes()) 
+    constitution = () => DeserializeConstitution(this) 
 
     getCodeAs = () => {
         return {
             op: () => new Opcode(this.codeValue() as any),
-            content: () => {
-               return new ContentCode(this.codeValue() as any)
+            content: (...motherPath: T_CODE_NAME[]) => {
+                const codeValue = this.codeValue()
+
+                if (motherPath.length === 0)
+                    return ContentCode.newWithValues(codeValue)
+                
+                const code = new ContentCode(...motherPath)
+                const depth = code.depth()
+                if (depth){
+                    for (let c of depth){
+                        if (c.value === codeValue) {
+                            const ret = new ContentCode(...motherPath, c.name)
+                            return ret
+                        }
+                    }
+                }
+                throw new Error("content opcode not found")
             }
         }
     }
 
-    toBase64 = () => new Inv.InvBuffer(this.bytes()).to().string().base64()
+    base64 = () => new Inv.InvBuffer(this.bytes()).to().string().base64()
 }

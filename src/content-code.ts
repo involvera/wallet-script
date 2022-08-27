@@ -1,5 +1,5 @@
 import _ from 'lodash'
-import { TByte } from "../constant"
+import { TByte } from "./constant"
 
 export type TContentType = 'PROPOSAL' | 'THREAD' | 'VOTE' | 'REWARD'
 export type TPubKHContent = 'PROPOSAL' | 'THREAD'
@@ -84,40 +84,43 @@ const CONTENT_CODES: TCode[] = [
 
 export default class ContentCode {
 
-    static fromPathValues = (...path: number[]) => {
-        let book = CONTENT_CODES
-        const ret: T_CODE_NAME[] = []
+    static CONTENT_CODES = CONTENT_CODES
 
-        for (let i = 0; i < path.length; i++){
-            const value = path[i]
-            if (!book)
-                throw new Error(`name ${value} (depth: ${i}) doesn't match with any content code`)
-            const e = _.find(book, {value}) as TCode | undefined
-            if (!e)
-                throw new Error(`name ${value} (depth: ${i}) doesn't match with any content code`)
-            if (e.depth)
-                book = _.cloneDeep(e.depth)
-            delete e.depth
-            ret.push(e.name)
-        }
-        return new ContentCode(...ret)
+    static newWithValues = (...path: number[]) => {
+        const ret = ContentCode.fromPath(...path)
+        return new ContentCode(...ret.map((v: TCode) => v.name))
+
     }
 
-    static MaxValue = CONTENT_CODES.length
+    static fromPath = (...path: number[] | string[] ) => {
+        let book: TCode[] | undefined = ContentCode.CONTENT_CODES
+        const ret: TCode[] = []
+        for (let i = 0; i < path.length; i++){
+            if (!book || book.length == 0)
+                break
+            const predicate = typeof path[i] === 'string' ? {name: path[i]} : {value: path[i]}
+            const e = _.find(book, predicate) as TCode | undefined
+            if (!e)
+                throw new Error(`predicate ${predicate} (depth: ${i}) doesn't match with any content code`)
+            book = _.cloneDeep(e.depth)
+            ret.push(e)
+        }
+        return ret
+    }
 
-    private _path: T_CODE_NAME[]
+    static MaxValue = ContentCode.CONTENT_CODES.length
+
+    private _codes: TCode[] = []
+
     constructor(...path: T_CODE_NAME[]){
-        this._path = path
-        //asserting errors if there are
-        this._getFullPath()
-
+        this._codes = ContentCode.fromPath(...path)
     }
 
     toArrayContentOpcode = () => {
         const ret: ContentCode[] = []
         let current: T_CODE_NAME[] = []
-        for (let p of this._path){
-            current.push(p)
+        for (let p of this._codes){
+            current.push(p.name)
             ret.push(new ContentCode(...current))
         }
         return ret
@@ -149,28 +152,6 @@ export default class ContentCode {
     depth = () => this.getLastElement().depth
     bytes = () => new Uint8Array([this.code()])
 
-    getLastElement = (): TCode => {
-        const fullpath = this._getFullPath()
-        return fullpath[fullpath.length-1]
-    }
-
-    private _getFullPath = (): TCode[] => {
-        let book = CONTENT_CODES
-        const ret: TCode[] = []
-
-        for (let i = 0; i < this._path.length; i++){
-            const name = this._path[i]
-            if (!book)
-                throw new Error(`name ${name} (depth: ${i}) doesn't match with any content code`)
-            const e = _.find(book, {name}) as TCode | undefined
-            if (!e)
-                throw new Error(`name ${name} (depth: ${i}) doesn't match with any content code`)
-            if (e.depth)
-                book = _.cloneDeep(e.depth)
-            this._path[i+1] && delete e.depth
-            ret.push(e)
-        }
-        return ret
-    }
+    getLastElement = (): TCode => this._codes[this._codes.length-1]
 }
 
