@@ -96,7 +96,7 @@ export default class ContentCode {
         let book: TCode[] | undefined = ContentCode.CONTENT_CODES
         const ret: TCode[] = []
         for (let i = 0; i < path.length; i++){
-            if (!book || book.length == 0)
+            if (!book || book.length === 0)
                 break
             const predicate = typeof path[i] === 'string' ? {name: path[i]} : {value: path[i]}
             const e = _.find(book, predicate) as TCode | undefined

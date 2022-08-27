@@ -18,7 +18,7 @@ const {
 export default class Script extends Array<Command> {
 
     static new = (array: string[] | Uint8Array[] | Inv.ArrayInvBuffer, stringEncoding: 'base64' | 'hex' | 'raw' = 'base64') => {
-        if (array.length == 0)
+        if (array.length === 0)
             return new Script()
         if (typeof array[0] === 'string'){
             if (stringEncoding === 'base64')
@@ -68,11 +68,11 @@ export default class Script extends Array<Command> {
         const costProposalScript = (contentNonce: number, contentPKH: Inv.PubKH, threadCost: Inv.InvBigInt, proposalCost: Inv.InvBigInt) => {
             let s = new Script().append()
             s.targetableContent(contentNonce, contentPKH)
-            if (threadCost.big() > BigInt(0)){
+            if (threadCost.gt(0)){
                 s = s.amount(threadCost)
                 .contentCode('PROPOSAL', 'COSTS', 'THREAD_PRICE')
             }
-            if (proposalCost.big() > BigInt(0)){
+            if (proposalCost.gt(0)){
                 s = s.amount(proposalCost)
                 .contentCode('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE')
             }
@@ -279,7 +279,7 @@ export default class Script extends Array<Command> {
        const targetingAndTargetableContentScript = () => {
             try {
                 return this.is().contentScript() && 
-                this[0].to().int(false).number() > Inv.InvBigInt.fromNumber(0).number() &&
+                this[0].to().int(false).gt(0) &&
                 !!this[1].format().pubKH() &&
                 !!this[2].format().pubKH()                 
             } catch (e){
@@ -301,7 +301,7 @@ export default class Script extends Array<Command> {
             try {
                 return !targetingAndTargetableContentScript() &&
                 this.is().contentScript() && 
-                this[0].to().int(false).number() > Inv.InvBigInt.fromNumber(0).number() &&
+                this[0].to().int(false).gt(0) &&
                 !!this[1].format().pubKH()
             } catch (e){
                 return false
@@ -341,9 +341,9 @@ export default class Script extends Array<Command> {
             try {
                 if (this.is().proposalScript() && this.length === Script.sizes().COST_PROPOSAL_MIN || this.length === Script.sizes().COST_PROPOSAL_MAX){
                     let i = 2
-                    while (this[i].length() == 8){
-                        const cost = this[i].to().int().big()
-                        if (cost <= BigInt(0) || cost > BigInt(MAX_UNIT_WRITING_COST) || !this[i+1].getCodeAs().content('PROPOSAL', 'COSTS'))
+                    while (this[i].length() === 8){
+                        const cost = this[i].to().int()
+                        if (cost.lwe(0) || cost.gt(MAX_UNIT_WRITING_COST) || !this[i+1].getCodeAs().content('PROPOSAL', 'COSTS'))
                              return false
                         i += 2
                     }
@@ -502,7 +502,7 @@ export default class Script extends Array<Command> {
                 str = `NONCE:${nonce(0)} PKH:${pkh(1)} `
                 i = 2
                 if (this.is().costProposalScript()){
-                    while (this[i].length() == 8){
+                    while (this[i].length() === 8){
                         str += `${amount(i)} ${contentCode(i+1, ['PROPOSAL', 'COSTS'])} `
                         i += 2
                     }
