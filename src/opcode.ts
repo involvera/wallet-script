@@ -1,18 +1,23 @@
-export const OP_NULL = 0x00 //0
-export const OP_CHECKSIG    = 0x14 // 20
-export const OP_EQUALVERIFY = 0x15 // 21
-export const OP_HASH160     = 0x16 // 22
-export const OP_DUP         = 0x17 // 23
-export const OP_CONTENT     = 0x18 // 24
+import _ from "lodash"
 
 export type T_OPCODE = 0x00 | 0x14 | 0x15 | 0x16 | 0x17 | 0x18
-export type T_OPCODE_STR = 'OP_NULL' | 'OP_CHECKSIG' | 'OP_EQUALVERIFY' | 'OP_HASH160' | 'OP_DUP' | 'OP_CONTENT'
-export const OPCODE_LIST: T_OPCODE[] = [OP_NULL, OP_CHECKSIG, OP_EQUALVERIFY, OP_HASH160, OP_DUP, OP_CONTENT]
+
+const OPCODES: { [key: string]: T_OPCODE } = {
+    OP_NULL: 0x00,
+    OP_CHECKSIG:    0x14, // 20
+    OP_EQUALVERIFY:  0x15, // 21
+    OP_HASH160:      0x16, // 22s
+    OP_DUP:          0x17, // 23
+    OP_CONTENT:  0x18 // 24
+}
 
 export default class Opcode {
     
+    static list = OPCODES
+
     constructor(private opcode: T_OPCODE){
-        if (OPCODE_LIST.indexOf(opcode) === -1){
+        const op = _.get(_.invert(OPCODES), opcode, null)
+        if (!op){
             throw new Error("This is not a valid opcode")
         }
         this.opcode = opcode
@@ -21,21 +26,5 @@ export default class Opcode {
     bytes = () => new Uint8Array([this.get()])
 
     eq = (code: T_OPCODE) => this.get() === code
-
-    toString = (): T_OPCODE_STR => {
-        switch (this.get()) {
-            case OP_CHECKSIG:
-                return "OP_CHECKSIG"
-            case OP_EQUALVERIFY:
-                return "OP_EQUALVERIFY"
-            case OP_HASH160:
-                return "OP_HASH160"
-            case OP_DUP:
-                return "OP_DUP"
-            case OP_CONTENT:
-                return "OP_CONTENT"
-            default:
-                return "OP_NULL"
-        }
-    }
+    toString = () => _.get(_.invert(OPCODES), this.get(), 'OP_NULL') 
 }

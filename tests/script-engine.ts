@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import 'mocha';
 
-import Opcode, { OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_CONTENT, T_OPCODE } from '../src/opcode';
+import Opcode, {T_OPCODE} from '../src/opcode';
 import ContentCode, { T_CODE_NAME } from '../src/content-code';
 import Script from '../src/script'
 
@@ -13,6 +13,10 @@ import {Inv } from 'wallet-util'
 const {
     InvBuffer,
 } = Inv
+
+const {
+    OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_CONTENT, T_OPCODE
+} = Opcode.list
 
 //utils
 const cc = (...path: T_CODE_NAME[]) => new ContentCode(...path).bytes()
@@ -60,7 +64,7 @@ describe('Testing script-engine', () => {
     it('Lock', () => {
         const s = Script.build().lockScript(new Inv.PubKH(PUBKH_BUFFER))
         expect(s.bytes().toLocaleString()).to.eq(LOCK_SCRIPT.toLocaleString())
-        expect(s.type()).to.eq(Script.types.REGULAR)
+        expect(s.type()).to.eq(0)
         expect(s.typeString()).to.eq('REGULAR')
         expect(s.typeD2()).to.eq(null)
     
@@ -99,7 +103,7 @@ describe('Testing script-engine', () => {
     it('Unlocking', () => {
         const s = Script.build().unlockScript(new Inv.Signature(SIGNATURE_BUFFER), new Inv.PubKey(PUBK_BUFFER))
         expect(s.bytes().toString()).to.eq(UNLOCK_SCRIPT.toString())
-        expect(s.type()).to.eq(Script.types.REGULAR)
+        expect(s.type()).to.eq(0)
         expect(s.typeString()).to.eq('REGULAR')
         expect(s.typeD2()).to.eq(null)
     
@@ -139,7 +143,7 @@ describe('Testing script-engine', () => {
         const s = Script.build().applicationProposal(NONCE, new Inv.PubKH(PUBKH_BUFFER))
         expect(s.bytes().toString()).to.eq(APPLICATION_PROPOSAL_SCRIPT.toString())
 
-        expect(s.type()).to.eq(Script.types.PROPOSAL)
+        expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('APPLICATION')
     
@@ -178,7 +182,7 @@ describe('Testing script-engine', () => {
     it('Proposal Cost - Thread price update', () => {
         const s = Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new InvBuffer(THREAD_PRICE).to().int(false), new Inv.InvBigInt(-1))
         expect(s.bytes().toString()).to.eq(COST_PROPOSAL_SCRIPT_TCHANGE.toString())
-        expect(s.type()).to.eq(Script.types.PROPOSAL)
+        expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
     
@@ -218,7 +222,7 @@ describe('Testing script-engine', () => {
     it('Proposal Cost - Proposal price update', () => {
         const s = Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new Inv.InvBigInt(-1), new InvBuffer(PROPOSAL_PRICE).to().int(false))
         expect(s.bytes().toString()).to.eq(COST_PROPOSAL_SCRIPT_PCHANGE.toString())
-        expect(s.type()).to.eq(Script.types.PROPOSAL)
+        expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
     
@@ -259,7 +263,7 @@ describe('Testing script-engine', () => {
     it('Proposal Cost - Proposal & Thread price update', () => {
         const s = Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new InvBuffer(THREAD_PRICE).to().int(false), new InvBuffer(PROPOSAL_PRICE).to().int(false))
         expect(s.bytes().toString()).to.eq(COST_PROPOSAL_SCRIPT_BOTHCHANGE.toString())
-        expect(s.type()).to.eq(Script.types.PROPOSAL)
+        expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
     
@@ -301,7 +305,7 @@ describe('Testing script-engine', () => {
     it('Proposal Constitution', () => {
         const s = Script.build().constitutionProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), NewConstitution())
         expect(s.bytes().toString()).to.eq(CONSTITUTION_PROPOSAL_SCRIPT.toString())
-        expect(s.type()).to.eq(Script.types.PROPOSAL)
+        expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('CONSTITUTION')
 
@@ -339,7 +343,7 @@ describe('Testing script-engine', () => {
     it('Thread', () => {
         const s = Script.build().threadScript(NONCE, new Inv.PubKH(PUBKH_BUFFER))
         expect(s.bytes().toString()).to.eq(THREAD_SCRIPT.toString())
-        expect(s.type()).to.eq(Script.types.THREAD)
+        expect(s.type()).to.eq(2)
         expect(s.typeString()).to.eq('THREAD')
         expect(s.typeD2()).to.eq('THREAD')
     
@@ -379,7 +383,7 @@ describe('Testing script-engine', () => {
     it('Re-Thread', () => {
         const s = Script.build().rethreadScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new Inv.PubKH(PUBKH_BUFFER))
         expect(s.bytes().toString()).to.eq(RETHREAD_SCRIPT.toString())
-        expect(s.type()).to.eq(Script.types.THREAD)
+        expect(s.type()).to.eq(2)
         expect(s.typeString()).to.eq('THREAD')
         expect(s.typeD2()).to.eq('RETHREAD')
     
@@ -419,7 +423,7 @@ describe('Testing script-engine', () => {
     it('Reward', () => {
         const s = Script.build().rewardScript(new Inv.PubKH(PUBKH_BUFFER), VOUT)
         expect(s.bytes().toString()).to.eq(REWARD_SCRIPT.toString())
-        expect(s.type()).to.eq(Script.types.REWARD)
+        expect(s.type()).to.eq(3)
         expect(s.typeString()).to.eq('REWARD')
         expect(s.typeD2()).to.eq(null)
 
@@ -460,7 +464,7 @@ describe('Testing script-engine', () => {
     it('Accepted Vote', () => {
         const s = Script.build().voteScript(new Inv.PubKH(PUBKH_BUFFER), true)
         expect(s.bytes().toString()).to.eq(ACCEPTED_VOTE_SCRIPT.toString())
-        expect(s.type()).to.eq(Script.types.VOTE)
+        expect(s.type()).to.eq(4)
         expect(s.typeString()).to.eq('VOTE')
         expect(s.typeD2()).to.eq('ACCEPTED')
     
@@ -500,7 +504,7 @@ describe('Testing script-engine', () => {
     it('Declined Vote', () => {
         const s = Script.build().voteScript(new Inv.PubKH(PUBKH_BUFFER), false)
         expect(s.bytes().toString()).to.eq(DECLINED_VOTE_SCRIPT.toString())
-        expect(s.type()).to.eq(Script.types.VOTE)
+        expect(s.type()).to.eq(4)
         expect(s.typeString()).to.eq('VOTE')
         expect(s.typeD2()).to.eq('DECLINED')
     

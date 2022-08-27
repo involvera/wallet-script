@@ -2,19 +2,18 @@ import { Inv } from 'wallet-util'
 import Command, {TCommand} from './command'
 import Opcode, {T_OPCODE} from './opcode'
 import ContentCode, { T_CODE_NAME } from './content-code'
-import { OP_CHECKSIG, OP_CONTENT, OP_DUP, OP_EQUALVERIFY, OP_HASH160 } from './opcode'
 import { SerializeConstitution, TConstitution } from './constitution'
 import { MAX_CONSTITUTION_RULE, MAX_TX_OUTPUT, MAX_UNIT_WRITING_COST, PUBKEY_H_BURNER, TByte } from './constant'
 import { NOT_A_CONSTITUTION_PROPOSAL, NOT_A_COST_PROPOSAL, NOT_A_LOCK_SCRIPT, NOT_A_REWARD_SCRIPT, NOT_A_TARGETABLE_CONTENT, NOT_A_TARGETING_CONTENT } from './errors'
 import _ from 'lodash'
 
-const SCRIPT_TYPES = {
-    REGULAR: 0,
-    THREAD: 1,
-    PROPOSAL: 2,
-    VOTE: 3,
-    REWARD: 4,
-}
+const {
+    OP_CHECKSIG,
+    OP_CONTENT,
+    OP_DUP,
+    OP_EQUALVERIFY,
+    OP_HASH160,
+} = Opcode.list
 
 export default class Script extends Array<Command> {
 
@@ -36,8 +35,6 @@ export default class Script extends Array<Command> {
     static fromArrayBytes = (array: string[]) => array.map((str: string) => new Command(Inv.InvBuffer.from64(str))) as Script
 
     static sizes = () => SCRIPT_LENGTH
-    static types = SCRIPT_TYPES
-
 
     static build = () => {
 
@@ -464,22 +461,16 @@ export default class Script extends Array<Command> {
     }
 
     public type = () => {
-        const T = Script.types
-        if (this.is().proposalScript())
-            return T.PROPOSAL
-        if (this.is().threadD1Script())
-            return T.THREAD
-        if (this.is().rewardScript())
-            return T.REWARD
-        if (this.is().voteScript()){
-            return T.VOTE
+        if (this.is().contentScript()){
+            return new ContentCode(this[this.length-2].getCodeAs().content().name()).code()
         }
-        return T.REGULAR
+        return 0
     }
 
     public typeString = () => {
-        const t = this.type()
-        return _.get(_.invert(Script.types), t, false) as string
+        if (this.type() === 0)
+            return 'REGULAR'
+        return ContentCode.newWithValues(this.type()).name()
     }
     
     base64 = (): string[] => {
