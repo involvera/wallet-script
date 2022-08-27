@@ -1,14 +1,6 @@
-import { Lib, Inv } from 'wallet-util'
+import { Inv } from 'wallet-util'
 import { MAX_CONSTITUTION_RULE } from "./constant"
 import { WRONG_CONSTITUTION_LENGTH } from "./errors"
-
-const {
-	ConcatBytes
-} = Lib.Hash
-
-const {
-	InvBuffer
-} = Inv
 
 export interface IConstitutionRule {
     title: string
