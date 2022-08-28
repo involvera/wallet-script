@@ -67,6 +67,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(0)
         expect(s.typeString()).to.eq('REGULAR')
         expect(s.typeD2()).to.eq(null)
+        expect(s.fullSizeOctet()).to.eq(24)
     
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
@@ -106,6 +107,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(0)
         expect(s.typeString()).to.eq('REGULAR')
         expect(s.typeD2()).to.eq(null)
+        expect(s.fullSizeOctet()).to.eq(105)
     
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
@@ -142,10 +144,10 @@ describe('Testing script-engine', () => {
     it('Application Proposal', () => {
         const s = Script.build().applicationProposal(NONCE, new Inv.PubKH(PUBKH_BUFFER))
         expect(s.bytes().toString()).to.eq(APPLICATION_PROPOSAL_SCRIPT.toString())
-
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('APPLICATION')
+        expect(s.fullSizeOctet()).to.eq(27)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -185,6 +187,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
+        expect(s.fullSizeOctet()).to.eq(36)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -225,6 +228,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
+        expect(s.fullSizeOctet()).to.eq(36)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -266,6 +270,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
+        expect(s.fullSizeOctet()).to.eq(45)
     
     
         const parse = s.parse()
@@ -308,6 +313,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('CONSTITUTION')
+        expect(s.fullSizeOctet()).to.eq(75)
 
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -346,6 +352,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(2)
         expect(s.typeString()).to.eq('THREAD')
         expect(s.typeD2()).to.eq('THREAD')
+        expect(s.fullSizeOctet()).to.eq(27)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -386,6 +393,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(2)
         expect(s.typeString()).to.eq('THREAD')
         expect(s.typeD2()).to.eq('RETHREAD')
+        expect(s.fullSizeOctet()).to.eq(47)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -426,6 +434,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(3)
         expect(s.typeString()).to.eq('REWARD')
         expect(s.typeD2()).to.eq(null)
+        expect(s.fullSizeOctet()).to.eq(23)
 
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
@@ -467,6 +476,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(4)
         expect(s.typeString()).to.eq('VOTE')
         expect(s.typeD2()).to.eq('ACCEPTED')
+        expect(s.fullSizeOctet()).to.eq(23)
     
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
@@ -507,6 +517,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(4)
         expect(s.typeString()).to.eq('VOTE')
         expect(s.typeD2()).to.eq('DECLINED')
+        expect(s.fullSizeOctet()).to.eq(23)
     
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
