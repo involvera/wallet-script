@@ -1,5 +1,6 @@
 import typescript from 'rollup-plugin-typescript2'
 import { uglify } from 'rollup-plugin-uglify';
+import external from 'rollup-plugin-peer-deps-external'
 import commonjs from '@rollup/plugin-commonjs';
 import pkg from './package.json'
 
@@ -18,6 +19,7 @@ const config = {
         },
     ],
     plugins: [
+        external(),
         typescript({
             tsconfig: 'tsconfig.json',
             tsconfigOverride: { compilerOptions: { module: 'es2015' } },

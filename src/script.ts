@@ -171,13 +171,7 @@ export default class Script extends Array<Command> {
         }
     }
 
-    fullSizeOctet = () => {
-        let total = 0
-        this.forEach((c: Command) =>{
-            total += c.bytes().length
-        })
-        return total
-    }
+    fullSizeOctet = () => Inv.InvBuffer.FromUint8s(...(this.map((c: Command) => c.bytes()))).length()
 
     parse = () => {
         const contentNonce = () => {
