@@ -150,7 +150,7 @@ export default class Script extends Array<Command> {
         const pubKH = (pubKH: Inv.PubKH) => _push(pubKH)
         const signature = (sig: Inv.Signature) => _push(sig)
         const pubKey = (pubk: Inv.PubKey) => _push(pubk)
-        const targetableContent = (nonce: number, pkh: Inv.PubKH) => _push(Inv.InvBigInt.fromNumber(nonce).to().bytes('uint32')).pubKH(pkh)
+        const targetableContent = (nonce: number, pkh: Inv.PubKH) => _push(new Inv.InvBigInt(nonce).to().bytes('uint32')).pubKH(pkh)
         const constitution = (constitution: TConstitution) => _push(SerializeConstitution(constitution))
 
         const done = (): Script => {
@@ -553,8 +553,8 @@ const SCRIPT_LENGTH = {
     LOCK: Script.build().lockScript(Inv.PubKH.random()).length,
     UNLOCK: Script.build().unlockScript(Inv.Signature.random(), Inv.PubKey.random()).length,
     APPLICATION_PROPOSAL: Script.build().applicationProposal(1, Inv.PubKH.random()).length,
-    COST_PROPOSAL_MIN: Script.build().costProposalScript(1, Inv.PubKH.random(), Inv.InvBigInt.fromNumber(-1), Inv.InvBigInt.fromNumber(5000)).length,
-    COST_PROPOSAL_MAX: Script.build().costProposalScript(1, Inv.PubKH.random(), Inv.InvBigInt.fromNumber(5000), Inv.InvBigInt.fromNumber(5000)).length,
+    COST_PROPOSAL_MIN: Script.build().costProposalScript(1, Inv.PubKH.random(), new Inv.InvBigInt(-1), new Inv.InvBigInt(5000)).length,
+    COST_PROPOSAL_MAX: Script.build().costProposalScript(1, Inv.PubKH.random(), new Inv.InvBigInt(5000), new Inv.InvBigInt(5000)).length,
     CONSTITUTION_PROPOSAL: Script.build().constitutionProposalScript(1, Inv.PubKH.random(), [{title: 'Title', content: 'Rule'}]).length,
     THREAD: Script.build().threadScript(1, Inv.PubKH.random()).length,
     RETHREAD: Script.build().rethreadScript(1, Inv.PubKH.random(), Inv.PubKH.random()).length,
