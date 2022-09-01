@@ -31,8 +31,8 @@ export default class Script extends Array<Command> {
         return new Script(...array.map((buf: any) => new Command(buf)))
     }
 
-    static fromBase64 = (array: string[]) => array.map((str: string) => new Command(Inv.InvBuffer.from64(str))) as Script
-    static fromArrayBytes = (array: string[]) => array.map((str: string) => new Command(Inv.InvBuffer.from64(str))) as Script
+    static fromBase64 = (array: string[]) => Script.new(array, 'base64')
+    static fromArrayBytes = (array: Uint8Array[]) => Script.new(array)
 
     static sizes = () => SCRIPT_LENGTH
 

@@ -31,6 +31,6 @@
   },
   "peerDependencies": {
     "lodash": "^4.17.21",
-    "wallet-util": "^1.1.8"
+    "wallet-util": "^1.2.1"
   }
 }
