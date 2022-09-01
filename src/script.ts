@@ -136,6 +136,8 @@ export default class Script extends Array<Command> {
         }
     }
     
+    copy = () => Script.new(this.bytes())
+
     append = () => {
         const _push = (a: TCommand) => {
             this.push(new Command(a))

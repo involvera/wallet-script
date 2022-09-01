@@ -33,6 +33,8 @@ export default class Command extends Inv.InvBuffer {
         super(Command.toUint8Array(elem))
     }
 
+    copy = () => new Command(this.bytes())
+    
     assert = () => {
         const isCode = () => {
             if (!this.is().code())
