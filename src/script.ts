@@ -487,7 +487,7 @@ export default class Script extends Array<Command> {
         return ret
     }
 
-    toString(): string {
+    pretty(): string {
 
         const nonce = (index: number) => this[index].to().int().number()
         const contentCode = (index: number, motherCategoryPath: T_CODE_NAME[]) => this[index].getCodeAs().content(...motherCategoryPath).name()

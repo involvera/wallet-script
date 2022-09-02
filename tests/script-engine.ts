@@ -98,7 +98,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(false)
         expect(is.targetingcript()).to.eq(false)
-        expect(`OP_DUP OP_HASH160 93ce48570b55c42c2af816aeaba06cfee1224fae OP_EQUALVERIFY OP_CHECKSIG`).to.eq(s.toString())
+        expect(`OP_DUP OP_HASH160 93ce48570b55c42c2af816aeaba06cfee1224fae OP_EQUALVERIFY OP_CHECKSIG`).to.eq(s.pretty())
     });
 
     it('Unlocking', () => {
@@ -138,7 +138,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(false)
         expect(is.targetingcript()).to.eq(false)
-        expect(`SIGNATURE:3046022100ceadf41cc9f116107c38f56b4a77b86632b521cd03621ca962fc6e0c8dec3966022100aca63c2a4435f71e4510ff3ba62e285acf1a9c9f49d826ce5c6c9346e08cba77 PUBLIC_KEY:000000000000000000000000000000000000000000000000000000000000000000`).to.eq(s.toString())
+        expect(`SIGNATURE:3046022100ceadf41cc9f116107c38f56b4a77b86632b521cd03621ca962fc6e0c8dec3966022100aca63c2a4435f71e4510ff3ba62e285acf1a9c9f49d826ce5c6c9346e08cba77 PUBLIC_KEY:000000000000000000000000000000000000000000000000000000000000000000`).to.eq(s.pretty())
     });
 
     it('Application Proposal', () => {
@@ -178,7 +178,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(true)
         expect(is.targetingcript()).to.eq(false)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae APPLICATION PROPOSAL OP_CONTENT`).to.eq(s.toString())
+        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae APPLICATION PROPOSAL OP_CONTENT`).to.eq(s.pretty())
     });
 
     it('Proposal Cost - Thread price update', () => {
@@ -219,7 +219,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(true)
         expect(is.targetingcript()).to.eq(false)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 3000000 THREAD_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.toString())
+        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 3000000 THREAD_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.pretty())
     });
 
     it('Proposal Cost - Proposal price update', () => {
@@ -260,7 +260,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(true)
         expect(is.targetingcript()).to.eq(false)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 5000000 PROPOSAL_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.toString())
+        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 5000000 PROPOSAL_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.pretty())
     });
 
 
@@ -304,7 +304,7 @@ describe('Testing script-engine', () => {
         expect(is.targetableScript()).to.eq(true)
         expect(is.targetingcript()).to.eq(false)
 
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 3000000 THREAD_PRICE 5000000 PROPOSAL_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.toString())
+        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 3000000 THREAD_PRICE 5000000 PROPOSAL_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.pretty())
     });
     
     it('Proposal Constitution', () => {
@@ -383,7 +383,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(true)
         expect(is.targetingcript()).to.eq(false)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae THREAD THREAD OP_CONTENT`).to.eq(s.toString())
+        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae THREAD THREAD OP_CONTENT`).to.eq(s.pretty())
     });
 
 
@@ -424,7 +424,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(true)
         expect(is.targetableScript()).to.eq(true)
         expect(is.targetingcript()).to.eq(true)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae TARGET_CONTENT_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae RETHREAD THREAD OP_CONTENT`).to.eq(s.toString())
+        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae TARGET_CONTENT_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae RETHREAD THREAD OP_CONTENT`).to.eq(s.pretty())
     });
 
 
@@ -465,7 +465,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(false)
         expect(is.targetingcript()).to.eq(true)
-        expect(`THREAD_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae VOUT_REDIS:1 REWARD OP_CONTENT`).to.eq(s.toString())
+        expect(`THREAD_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae VOUT_REDIS:1 REWARD OP_CONTENT`).to.eq(s.pretty())
 
     });
 
@@ -507,7 +507,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(false)
         expect(is.targetingcript()).to.eq(true)
-        expect(`PROPOSAL_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae ACCEPTED VOTE OP_CONTENT`).to.eq(s.toString())
+        expect(`PROPOSAL_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae ACCEPTED VOTE OP_CONTENT`).to.eq(s.pretty())
 
     });
 
@@ -548,7 +548,7 @@ describe('Testing script-engine', () => {
         expect(is.targetingAndTargetableContentScript()).to.eq(false)
         expect(is.targetableScript()).to.eq(false)
         expect(is.targetingcript()).to.eq(true)
-        expect(`PROPOSAL_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae DECLINED VOTE OP_CONTENT`).to.eq(s.toString())
+        expect(`PROPOSAL_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae DECLINED VOTE OP_CONTENT`).to.eq(s.pretty())
     });
 
 
