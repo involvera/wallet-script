@@ -22,11 +22,11 @@ export default class Script extends Array<Command> {
             return new Script()
         if (typeof array[0] === 'string'){
             if (stringEncoding === 'base64')
-                array.map((buf: any) => new Command(Inv.InvBuffer.from64(buf))) as Script
+                return new Script(...array.map((buf: any) => new Command(Inv.InvBuffer.from64(buf))))
             if (stringEncoding === 'hex')
-                array.map((buf: any) => new Command(Inv.InvBuffer.fromHex(buf))) as Script
+                return new Script(...array.map((buf: any) => new Command(Inv.InvBuffer.fromHex(buf))))
             if (stringEncoding === 'raw')
-                array.map((buf: any) => new Command(Inv.InvBuffer.fromRaw(buf))) as Script
+                return new Script(...array.map((buf: any) => new Command(Inv.InvBuffer.fromRaw(buf))))
         }
         return new Script(...array.map((buf: any) => new Command(buf)))
     }
@@ -244,6 +244,18 @@ export default class Script extends Array<Command> {
             proposalCosts,
             distributionVout
         }
+    }
+
+    eq = (s: Script) => {
+        if (s.length == this.length){
+            const b1 = this.bytes()
+            const b2 = this.bytes()
+            for (let i = 0; i < this.length; i++){
+                if (b1[i].toLocaleString() !== b2[i].toLocaleString())
+                    return false
+            }
+        }
+        return true
     }
 
     has = () => {
