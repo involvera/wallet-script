@@ -173,7 +173,7 @@ export default class Script extends Array<Command> {
         }
     }
 
-    fullSizeOctet = () => Inv.InvBuffer.FromUint8s(...(this.map((c: Command) => c.bytes()))).length()
+    fullSizeOctet = () => Inv.InvBuffer.FromUint8s(...(this.map((c: Command) => c.bytes()))).length() + this.length
 
     parse = () => {
         const contentNonce = () => {

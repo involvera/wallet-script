@@ -65,9 +65,9 @@ describe('Testing script-engine', () => {
         const s = Script.build().lockScript(new Inv.PubKH(PUBKH_BUFFER))
         expect(s.bytes().toLocaleString()).to.eq(LOCK_SCRIPT.toLocaleString())
         expect(s.type()).to.eq(0)
-        expect(s.typeString()).to.eq('REGULAR')
+        expect(s.typeString()).to.eq('REGULAsR')
         expect(s.typeD2()).to.eq(null)
-        expect(s.fullSizeOctet()).to.eq(24)
+        expect(s.fullSizeOctet()).to.eq(29)
     
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
@@ -116,7 +116,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(0)
         expect(s.typeString()).to.eq('REGULAR')
         expect(s.typeD2()).to.eq(null)
-        expect(s.fullSizeOctet()).to.eq(105)
+        expect(s.fullSizeOctet()).to.eq(107)
     
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
@@ -162,7 +162,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('APPLICATION')
-        expect(s.fullSizeOctet()).to.eq(27)
+        expect(s.fullSizeOctet()).to.eq(32)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -208,7 +208,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
-        expect(s.fullSizeOctet()).to.eq(36)
+        expect(s.fullSizeOctet()).to.eq(43)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -255,7 +255,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
-        expect(s.fullSizeOctet()).to.eq(36)
+        expect(s.fullSizeOctet()).to.eq(43)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -303,7 +303,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('COSTS')
-        expect(s.fullSizeOctet()).to.eq(45)
+        expect(s.fullSizeOctet()).to.eq(54)
     
     
         const parse = s.parse()
@@ -352,7 +352,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(1)
         expect(s.typeString()).to.eq('PROPOSAL')
         expect(s.typeD2()).to.eq('CONSTITUTION')
-        expect(s.fullSizeOctet()).to.eq(75)
+        expect(s.fullSizeOctet()).to.eq(81)
 
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -397,7 +397,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(2)
         expect(s.typeString()).to.eq('THREAD')
         expect(s.typeD2()).to.eq('THREAD')
-        expect(s.fullSizeOctet()).to.eq(27)
+        expect(s.fullSizeOctet()).to.eq(32)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -444,7 +444,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(2)
         expect(s.typeString()).to.eq('THREAD')
         expect(s.typeD2()).to.eq('RETHREAD')
-        expect(s.fullSizeOctet()).to.eq(47)
+        expect(s.fullSizeOctet()).to.eq(53)
     
         const parse = s.parse()
         expect(parse.contentNonce()).to.eq(NONCE)
@@ -491,7 +491,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(3)
         expect(s.typeString()).to.eq('REWARD')
         expect(s.typeD2()).to.eq(null)
-        expect(s.fullSizeOctet()).to.eq(23)
+        expect(s.fullSizeOctet()).to.eq(27)
 
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
@@ -539,7 +539,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(4)
         expect(s.typeString()).to.eq('VOTE')
         expect(s.typeD2()).to.eq('ACCEPTED')
-        expect(s.fullSizeOctet()).to.eq(23)
+        expect(s.fullSizeOctet()).to.eq(27)
     
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
@@ -586,7 +586,7 @@ describe('Testing script-engine', () => {
         expect(s.type()).to.eq(4)
         expect(s.typeString()).to.eq('VOTE')
         expect(s.typeD2()).to.eq('DECLINED')
-        expect(s.fullSizeOctet()).to.eq(23)
+        expect(s.fullSizeOctet()).to.eq(27)
     
         const parse = s.parse()
         expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
