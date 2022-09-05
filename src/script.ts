@@ -56,7 +56,7 @@ export default class Script extends Array<Command> {
             .done()
         }
 
-        const applicationProposal = (contentNonce: number, contentPKH: Inv.PubKH) => {
+        const applicationProposal = (contentNonce: Inv.InvBigInt, contentPKH: Inv.PubKH) => {
             return new Script().append()
             .targetableContent(contentNonce, contentPKH)
             .contentCode('PROPOSAL', 'APPLICATION')
@@ -65,7 +65,7 @@ export default class Script extends Array<Command> {
             .done()
         }
 
-        const costProposalScript = (contentNonce: number, contentPKH: Inv.PubKH, threadCost: Inv.InvBigInt, proposalCost: Inv.InvBigInt) => {
+        const costProposalScript = (contentNonce: Inv.InvBigInt, contentPKH: Inv.PubKH, threadCost: Inv.InvBigInt, proposalCost: Inv.InvBigInt) => {
             let s = new Script().append()
             s.targetableContent(contentNonce, contentPKH)
             if (threadCost.gt(0)){
@@ -82,7 +82,7 @@ export default class Script extends Array<Command> {
             .done()
         }
 
-        const constitutionProposalScript = (contentNonce: number, contentPKH: Inv.PubKH, constitution: TConstitution) =>{
+        const constitutionProposalScript = (contentNonce: Inv.InvBigInt, contentPKH: Inv.PubKH, constitution: TConstitution) =>{
             return new Script().append()
             .targetableContent(contentNonce, contentPKH)
             .constitution(constitution)
@@ -92,7 +92,7 @@ export default class Script extends Array<Command> {
             .done()
         }
         
-        const threadScript =  (contentNonce: number, contentPKH: Inv.PubKH) => {
+        const threadScript =  (contentNonce: Inv.InvBigInt, contentPKH: Inv.PubKH) => {
             return new Script().append()
             .targetableContent(contentNonce, contentPKH)
             .contentCode('THREAD', 'THREAD')
@@ -101,7 +101,7 @@ export default class Script extends Array<Command> {
             .done()
         }
 
-        const rethreadScript =  (contentNonce: number, contentPKH: Inv.PubKH, targetedThreadPKH: Inv.PubKH) => {
+        const rethreadScript =  (contentNonce: Inv.InvBigInt, contentPKH: Inv.PubKH, targetedThreadPKH: Inv.PubKH) => {
             return new Script().append()
             .targetableContent(contentNonce, contentPKH)
             .pubKH(targetedThreadPKH)
@@ -152,7 +152,7 @@ export default class Script extends Array<Command> {
         const pubKH = (pubKH: Inv.PubKH) => _push(pubKH)
         const signature = (sig: Inv.Signature) => _push(sig)
         const pubKey = (pubk: Inv.PubKey) => _push(pubk)
-        const targetableContent = (nonce: number, pkh: Inv.PubKH) => _push(new Inv.InvBigInt(nonce).to().bytes('uint32')).pubKH(pkh)
+        const targetableContent = (nonce: Inv.InvBigInt, pkh: Inv.PubKH) => _push(nonce.to().bytes('uint32')).pubKH(pkh)
         const constitution = (constitution: TConstitution) => _push(SerializeConstitution(constitution))
 
         const done = (): Script => {
@@ -178,7 +178,7 @@ export default class Script extends Array<Command> {
     parse = () => {
         const contentNonce = () => {
             if (this.is().targetableScript())
-                return this[0].to().int().number()
+                return this[0].to().int()
             throw NOT_A_TARGETABLE_CONTENT
         }
 
@@ -212,16 +212,16 @@ export default class Script extends Array<Command> {
 
         const proposalCosts = () => {
             if (this.is().costProposalScript()){
-                let thread = BigInt(-1)
-                let proposal = BigInt(-1)
+                let thread = new Inv.InvBigInt(-1)
+                let proposal = new Inv.InvBigInt(-1)
                 let i = 2
                 while (this[i].length() === 8){
-                    const price = this[i].to().int().big()
+                    const price = this[i].to().int()
                     const cat = this[i+1].getCodeAs().content('PROPOSAL', 'COSTS')
                     if (cat.eq('PROPOSAL', 'COSTS', "PROPOSAL_PRICE"))
-                        proposal = BigInt(price as any)
+                        proposal = new Inv.InvBigInt(price)
                     if (cat.eq('PROPOSAL', 'COSTS', 'THREAD_PRICE'))
-                        thread = BigInt(price as any)
+                        thread = new Inv.InvBigInt(price)
                     i += 2
                 }
                 return { thread, proposal}
@@ -413,10 +413,10 @@ export default class Script extends Array<Command> {
 
         const rewardScript = (): boolean => {
             try {
-                const voutRedistribution = this[1].to().int().number()
+                const voutRedistribution = this[1].to().int()
                 return this.is().onlyTargetingContentScript() &&
                 this.length === Script.sizes().REWARD &&
-                voutRedistribution >= 0 && voutRedistribution <= MAX_TX_OUTPUT-1 &&
+                voutRedistribution.gte(0) && voutRedistribution.lwe(MAX_TX_OUTPUT-1) &&
                 this[2].getCodeAs().content().eq('REWARD')
             } catch(e){ 
                 return false
@@ -566,12 +566,12 @@ export default class Script extends Array<Command> {
 const SCRIPT_LENGTH = {
     LOCK: Script.build().lockScript(Inv.PubKH.random()).length,
     UNLOCK: Script.build().unlockScript(Inv.Signature.random(), Inv.PubKey.random()).length,
-    APPLICATION_PROPOSAL: Script.build().applicationProposal(1, Inv.PubKH.random()).length,
-    COST_PROPOSAL_MIN: Script.build().costProposalScript(1, Inv.PubKH.random(), new Inv.InvBigInt(-1), new Inv.InvBigInt(5000)).length,
-    COST_PROPOSAL_MAX: Script.build().costProposalScript(1, Inv.PubKH.random(), new Inv.InvBigInt(5000), new Inv.InvBigInt(5000)).length,
-    CONSTITUTION_PROPOSAL: Script.build().constitutionProposalScript(1, Inv.PubKH.random(), [{title: 'Title', content: 'Rule'}]).length,
-    THREAD: Script.build().threadScript(1, Inv.PubKH.random()).length,
-    RETHREAD: Script.build().rethreadScript(1, Inv.PubKH.random(), Inv.PubKH.random()).length,
+    APPLICATION_PROPOSAL: Script.build().applicationProposal(new Inv.InvBigInt(1), Inv.PubKH.random()).length,
+    COST_PROPOSAL_MIN: Script.build().costProposalScript(new Inv.InvBigInt(1), Inv.PubKH.random(), new Inv.InvBigInt(-1), new Inv.InvBigInt(5000)).length,
+    COST_PROPOSAL_MAX: Script.build().costProposalScript(new Inv.InvBigInt(1), Inv.PubKH.random(), new Inv.InvBigInt(5000), new Inv.InvBigInt(5000)).length,
+    CONSTITUTION_PROPOSAL: Script.build().constitutionProposalScript(new Inv.InvBigInt(1), Inv.PubKH.random(), [{title: 'Title', content: 'Rule'}]).length,
+    THREAD: Script.build().threadScript(new Inv.InvBigInt(1), Inv.PubKH.random()).length,
+    RETHREAD: Script.build().rethreadScript(new Inv.InvBigInt(1), Inv.PubKH.random(), Inv.PubKH.random()).length,
     REWARD: Script.build().rewardScript(Inv.PubKH.random(), 3).length,
     VOTE: Script.build().voteScript(Inv.PubKH.random(), true).length
 }

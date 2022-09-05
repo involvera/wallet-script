@@ -6,7 +6,7 @@ import ContentCode, { T_CODE_NAME } from '../src/content-code';
 import Script from '../src/script'
 
 import { NOT_A_CONSTITUTION_PROPOSAL, NOT_A_COST_PROPOSAL, NOT_A_LOCK_SCRIPT, NOT_A_REWARD_SCRIPT, NOT_A_TARGETABLE_CONTENT, NOT_A_TARGETING_CONTENT } from '../src/errors';
-import { PUBKEY_H_BURNER } from '../src/constant';
+import { PUBKEY_H_BURNER, TByte } from '../src/constant';
 import { NewConstitution, SerializeConstitution } from '../src/constitution';
 
 import {Inv } from 'wallet-util'
@@ -25,10 +25,10 @@ const op = (code: T_OPCODE) => new Opcode(code as any).bytes()
 //data
 const THREAD_PRICE = InvBuffer.fromNumber(3_000_000, 'uint64').bytes()
 const PROPOSAL_PRICE = InvBuffer.fromNumber(5_000_000, 'uint64').bytes()
-const VOUT = 1
-const NONCE = 5
-const VOUT_BYTES = InvBuffer.fromNumber(VOUT, 'uint8').bytes()
-const NONCE_BYTES = InvBuffer.fromNumber(NONCE, 'int32').bytes()
+const VOUT = new Inv.InvBigInt(1)
+const NONCE = new Inv.InvBigInt(5)
+const VOUT_BYTES = VOUT.bytes('int8').bytes()
+const NONCE_BYTES = NONCE.bytes('int32').bytes()
 const PUBKH_BUFFER = InvBuffer.fromHex('93ce48570b55c42c2af816aeaba06cfee1224fae').bytes()
 const PUBK_BUFFER = new Uint8Array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
 const SIGNATURE_BUFFER = InvBuffer.fromHex('3046022100ceadf41cc9f116107c38f56b4a77b86632b521cd03621ca962fc6e0c8dec3966022100aca63c2a4435f71e4510ff3ba62e285acf1a9c9f49d826ce5c6c9346e08cba77').bytes()
@@ -65,7 +65,7 @@ describe('Testing script-engine', () => {
         const s = Script.build().lockScript(new Inv.PubKH(PUBKH_BUFFER))
         expect(s.bytes().toLocaleString()).to.eq(LOCK_SCRIPT.toLocaleString())
         expect(s.type()).to.eq(0)
-        expect(s.typeString()).to.eq('REGULAsR')
+        expect(s.typeString()).to.eq('REGULAR')
         expect(s.typeD2()).to.eq(null)
         expect(s.fullSizeOctet()).to.eq(29)
     
@@ -106,8 +106,6 @@ describe('Testing script-engine', () => {
         expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
         expect(s.has().d2()).to.eq(false)
         expect(s.has().d3()).to.eq(false)
-
-
     });
 
     it('Unlocking', () => {
@@ -156,6 +154,7 @@ describe('Testing script-engine', () => {
         expect(s.has().d3()).to.eq(false)
     });
 
+
     it('Application Proposal', () => {
         const s = Script.build().applicationProposal(NONCE, new Inv.PubKH(PUBKH_BUFFER))
         expect(s.bytes().toString()).to.eq(APPLICATION_PROPOSAL_SCRIPT.toString())
@@ -165,7 +164,7 @@ describe('Testing script-engine', () => {
         expect(s.fullSizeOctet()).to.eq(32)
     
         const parse = s.parse()
-        expect(parse.contentNonce()).to.eq(NONCE)
+        expect(parse.contentNonce().big()).to.eq(NONCE.big())
         expect(parse.PKHFromLockScript().to().string().hex() ).to.eq(PUBKEY_H_BURNER)
         expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
         expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
@@ -211,13 +210,13 @@ describe('Testing script-engine', () => {
         expect(s.fullSizeOctet()).to.eq(43)
     
         const parse = s.parse()
-        expect(parse.contentNonce()).to.eq(NONCE)
+        expect(parse.contentNonce().big()).to.eq(NONCE.big())
         expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
         expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
         expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
         expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(parse.proposalCosts().proposal).to.eq(BigInt(-1))
-        expect(parse.proposalCosts().thread).to.eq(new InvBuffer(THREAD_PRICE).to().int(false).big().valueOf())
+        expect(parse.proposalCosts().proposal.number()).to.eq(-1)
+        expect(parse.proposalCosts().thread.big()).to.eq(new InvBuffer(THREAD_PRICE).to().int(false).big())
         expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
 
         const is = s.is()
@@ -258,13 +257,13 @@ describe('Testing script-engine', () => {
         expect(s.fullSizeOctet()).to.eq(43)
     
         const parse = s.parse()
-        expect(parse.contentNonce()).to.eq(NONCE)
+        expect(parse.contentNonce().big()).to.eq(NONCE.big())
         expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
         expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
         expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
         expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(parse.proposalCosts().thread).to.eq(BigInt(-1))
-        expect(parse.proposalCosts().proposal).to.eq(new InvBuffer(PROPOSAL_PRICE).to().int(false).big().valueOf())
+        expect(parse.proposalCosts().thread.number()).to.eq(-1)
+        expect(parse.proposalCosts().proposal.big()).to.eq(new InvBuffer(PROPOSAL_PRICE).to().int(false).big())
         expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
 
         const is = s.is()
@@ -307,13 +306,13 @@ describe('Testing script-engine', () => {
     
     
         const parse = s.parse()
-        expect(parse.contentNonce()).to.eq(NONCE)
+        expect(parse.contentNonce().big()).to.eq(NONCE.big())
         expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
         expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
         expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
         expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(parse.proposalCosts().thread).to.eq(new InvBuffer(THREAD_PRICE).to().int(false).big().valueOf())
-        expect(parse.proposalCosts().proposal).to.eq(new InvBuffer(PROPOSAL_PRICE).to().int(false).big().valueOf())
+        expect(parse.proposalCosts().thread.big()).to.eq(new InvBuffer(THREAD_PRICE).to().int(false).big())
+        expect(parse.proposalCosts().proposal.big()).to.eq(new InvBuffer(PROPOSAL_PRICE).to().int(false).big())
         expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
 
         const is = s.is()
@@ -355,7 +354,7 @@ describe('Testing script-engine', () => {
         expect(s.fullSizeOctet()).to.eq(81)
 
         const parse = s.parse()
-        expect(parse.contentNonce()).to.eq(NONCE)
+        expect(parse.contentNonce().big()).to.eq(NONCE.big())
         expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
         expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
         expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
@@ -400,7 +399,7 @@ describe('Testing script-engine', () => {
         expect(s.fullSizeOctet()).to.eq(32)
     
         const parse = s.parse()
-        expect(parse.contentNonce()).to.eq(NONCE)
+        expect(parse.contentNonce().big()).to.eq(NONCE.big())
         expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
         expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
         expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
@@ -447,7 +446,7 @@ describe('Testing script-engine', () => {
         expect(s.fullSizeOctet()).to.eq(53)
     
         const parse = s.parse()
-        expect(parse.contentNonce()).to.eq(NONCE)
+        expect(parse.contentNonce().big()).to.eq(NONCE.big())
         expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
         expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
         expect(parse.targetPKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
@@ -486,7 +485,7 @@ describe('Testing script-engine', () => {
 
 
     it('Reward', () => {
-        const s = Script.build().rewardScript(new Inv.PubKH(PUBKH_BUFFER), VOUT)
+        const s = Script.build().rewardScript(new Inv.PubKH(PUBKH_BUFFER), VOUT.number() as TByte)
         expect(s.bytes().toString()).to.eq(REWARD_SCRIPT.toString())
         expect(s.type()).to.eq(3)
         expect(s.typeString()).to.eq('REWARD')
@@ -500,7 +499,7 @@ describe('Testing script-engine', () => {
         expect(parse.targetPKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
         expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
         expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-        expect(parse.distributionVout().number()).to.eq(VOUT)
+        expect(parse.distributionVout().number()).to.eq(VOUT.number())
 
         const is = s.is()
         expect(is.lockingScript()).to.eq(false)
