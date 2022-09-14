@@ -111,10 +111,10 @@ export default class Script extends Array<Command> {
             .done()
         }
 
-        const rewardScript = (targetedThreadPKH: Inv.PubKH, vout: TByte) => {
+        const rewardScript = (targetedThreadPKH: Inv.PubKH, vout: Inv.InvBigInt) => {
             return new Script().append()
             .pubKH(targetedThreadPKH)
-            .byte(vout)
+            .vout(vout)
             .contentCode('REWARD')
             .opcode(OP_CONTENT)
             .done()
@@ -144,9 +144,10 @@ export default class Script extends Array<Command> {
             return this.append()
         }
 
-        const amount = (n: Inv.InvBigInt) => _push(n.to().bytes('uint64'))
+        const amount = (n: Inv.InvBigInt) => _push(n.bytes('uint64'))
         const byte = (byte: TByte) => _push(new Uint8Array([byte]))
 
+        const vout = (vout: Inv.InvBigInt) => _push(vout.bytes('int16'))
         const opcode = (code: T_OPCODE) => _push(new Opcode(code))
         const contentCode = (...path: T_CODE_NAME[]) => _push(new ContentCode(...path))
         const pubKH = (pubKH: Inv.PubKH) => _push(pubKH)
@@ -161,6 +162,7 @@ export default class Script extends Array<Command> {
 
         return {
             amount,
+            vout,
             opcode,
             contentCode,
             byte,
@@ -224,7 +226,7 @@ export default class Script extends Array<Command> {
                         thread = new Inv.InvBigInt(price)
                     i += 2
                 }
-                return { thread, proposal}
+                return { thread, proposal }
             }
             throw NOT_A_COST_PROPOSAL
         }
@@ -293,8 +295,10 @@ export default class Script extends Array<Command> {
 
        const targetingAndTargetableContentScript = () => {
             try {
+                const nonce = this[0]
                 return this.is().contentScript() && 
-                this[0].to().int(false).gt(0) &&
+                nonce.length() >= 4 /* bytes as int32 or more */ &&  
+                nonce.to().int(false).gt(0) &&
                 !!this[1].format().pubKH() &&
                 !!this[2].format().pubKH()                 
             } catch (e){
@@ -314,9 +318,11 @@ export default class Script extends Array<Command> {
 
        const onlyTargetableContentScript = () => {
             try {
+                const nonce = this[0]
                 return !targetingAndTargetableContentScript() &&
-                this.is().contentScript() && 
-                this[0].to().int(false).gt(0) &&
+                this.is().contentScript() &&
+                nonce.length() >= 4 /* bytes as int32 or more */ &&  
+                nonce.to().int(false).gt(0) &&
                 !!this[1].format().pubKH()
             } catch (e){
                 return false
@@ -413,10 +419,12 @@ export default class Script extends Array<Command> {
 
         const rewardScript = (): boolean => {
             try {
-                const voutRedistribution = this[1].to().int()
+                const voutRedistribution = this[1]
                 return this.is().onlyTargetingContentScript() &&
                 this.length === Script.sizes().REWARD &&
-                voutRedistribution.gte(0) && voutRedistribution.lwe(MAX_TX_OUTPUT-1) &&
+                voutRedistribution.length() >= 2 &&
+                voutRedistribution.to().int().gte(0) && 
+                voutRedistribution.to().int().lwe(MAX_TX_OUTPUT-1) &&
                 this[2].getCodeAs().content().eq('REWARD')
             } catch(e){ 
                 return false
@@ -427,15 +435,15 @@ export default class Script extends Array<Command> {
             try {
                 return this.is().onlyTargetingContentScript() &&
                 this.length === Script.sizes().VOTE &&
-                this[1].getCodeAs().content('VOTE') &&
+                !!this[1].getCodeAs().content('VOTE') &&
                 !!this[2].getCodeAs().content().eq('VOTE')
             } catch(e){ 
                 return false
             }
         }
 
-        const voteAcceptedD2 = () => this.typeD2() === 'ACCEPTED'
-        const voteDeclinedD2 = () => this.typeD2() === 'DECLINED'
+        const voteAcceptedD2 = () => voteScript() && this.typeD2() === 'ACCEPTED'
+        const voteDeclinedD2 = () => voteScript() && this.typeD2() === 'DECLINED'
 
         return {
             lockingScript,
@@ -572,6 +580,6 @@ const SCRIPT_LENGTH = {
     CONSTITUTION_PROPOSAL: Script.build().constitutionProposalScript(new Inv.InvBigInt(1), Inv.PubKH.random(), [{title: 'Title', content: 'Rule'}]).length,
     THREAD: Script.build().threadScript(new Inv.InvBigInt(1), Inv.PubKH.random()).length,
     RETHREAD: Script.build().rethreadScript(new Inv.InvBigInt(1), Inv.PubKH.random(), Inv.PubKH.random()).length,
-    REWARD: Script.build().rewardScript(Inv.PubKH.random(), 3).length,
+    REWARD: Script.build().rewardScript(Inv.PubKH.random(), new Inv.InvBigInt(3)).length,
     VOTE: Script.build().voteScript(Inv.PubKH.random(), true).length
 }
