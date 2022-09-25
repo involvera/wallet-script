@@ -3,9 +3,9 @@ import Command, {TCommand} from './command'
 import Opcode, {T_OPCODE} from './opcode'
 import ContentCode, { T_CODE_NAME } from './content-code'
 import { SerializeConstitution, TConstitution } from './constitution'
-import { MAX_CONSTITUTION_RULE, MAX_TX_OUTPUT, MAX_UNIT_WRITING_COST, PUBKEY_H_BURNER, TByte } from './constant'
+import { LAST_TX_VERSION, MAX_CONSTITUTION_RULE, MAX_TX_OUTPUT, MAX_UNIT_WRITING_COST, PUBKEY_H_BURNER, TByte } from './constant'
 import { NOT_A_CONSTITUTION_PROPOSAL, NOT_A_COST_PROPOSAL, NOT_A_LOCK_SCRIPT, NOT_A_REWARD_SCRIPT, NOT_A_TARGETABLE_CONTENT, NOT_A_TARGETING_CONTENT } from './errors'
-import _ from 'lodash'
+import { isNumber } from 'lodash'
 
 const {
     OP_CHECKSIG,
@@ -92,7 +92,7 @@ export default class Script extends Array<Command> {
             .done()
         }
         
-        const threadScript =  (contentNonce: Inv.InvBigInt, contentPKH: Inv.PubKH) => {
+        const threadScript = (contentNonce: Inv.InvBigInt, contentPKH: Inv.PubKH) => {
             return new Script().append()
             .targetableContent(contentNonce, contentPKH)
             .contentCode('THREAD', 'THREAD')
@@ -111,10 +111,10 @@ export default class Script extends Array<Command> {
             .done()
         }
 
-        const rewardScript = (targetedThreadPKH: Inv.PubKH, vout: Inv.InvBigInt) => {
+        const rewardScript = (targetedThreadPKH: Inv.PubKH, vout: Inv.InvBigInt, txVersion: TByte) => {
             return new Script().append()
             .pubKH(targetedThreadPKH)
-            .vout(vout)
+            .vout(vout, txVersion)
             .contentCode('REWARD')
             .opcode(OP_CONTENT)
             .done()
@@ -145,9 +145,7 @@ export default class Script extends Array<Command> {
         }
 
         const amount = (n: Inv.InvBigInt) => _push(n.bytes('uint64'))
-        const byte = (byte: TByte) => _push(new Uint8Array([byte]))
-
-        const vout = (vout: Inv.InvBigInt) => _push(vout.bytes('int16'))
+        const vout = (vout: Inv.InvBigInt, txVersion: TByte) => _push(vout.bytes(txVersion == 0 ? 'int8' : 'int16'))
         const opcode = (code: T_OPCODE) => _push(new Opcode(code))
         const contentCode = (...path: T_CODE_NAME[]) => _push(new ContentCode(...path))
         const pubKH = (pubKH: Inv.PubKH) => _push(pubKH)
@@ -165,7 +163,6 @@ export default class Script extends Array<Command> {
             vout,
             opcode,
             contentCode,
-            byte,
             pubKH,
             signature,
             pubKey,
@@ -179,7 +176,7 @@ export default class Script extends Array<Command> {
 
     parse = () => {
         const contentNonce = () => {
-            if (this.is().targetableScript())
+            if (this.is().contentWithAddress())
                 return this[0].to().int()
             throw NOT_A_TARGETABLE_CONTENT
         }
@@ -193,15 +190,15 @@ export default class Script extends Array<Command> {
         }
 
         const PKHFromContentScript = (): Inv.PubKH => {
-            if (this.is().targetableScript())
+            if (this.is().contentWithAddress())
                 return this[1].format().pubKH()
             throw NOT_A_TARGETABLE_CONTENT
         }
 
         const targetPKHFromContentScript = (): Inv.PubKH => {
-            if (this.is().onlyTargetingContentScript())
+            if (this.is().contentWithoutAddress())
                 return this[0].format().pubKH()
-            if (this.is().targetingAndTargetableContentScript())
+            if (this.is().contentWithAddressAndTarget())
                 return this[2].format().pubKH()
             throw NOT_A_TARGETING_CONTENT
         }
@@ -214,8 +211,8 @@ export default class Script extends Array<Command> {
 
         const proposalCosts = () => {
             if (this.is().costProposalScript()){
-                let thread = new Inv.InvBigInt(-1)
-                let proposal = new Inv.InvBigInt(-1)
+                let thread = new Inv.InvBigInt(0)
+                let proposal = new Inv.InvBigInt(0)
                 let i = 2
                 while (this[i].length() === 8){
                     const price = this[i].to().int()
@@ -231,8 +228,8 @@ export default class Script extends Array<Command> {
             throw NOT_A_COST_PROPOSAL
         }
 
-        const distributionVout = () => {
-            if (this.is().rewardScript())
+        const distributionVout = (txVersion: TByte) => {
+            if (this.is().rewardScript(txVersion))
                 return this[1].to().int()
             throw NOT_A_REWARD_SCRIPT
         }
@@ -261,12 +258,61 @@ export default class Script extends Array<Command> {
     }
 
     has = () => {
-        const d2 = () => this.is().proposalScript() || this.is().threadD1Script() ||this.is().voteScript()
+        const d2 = () => this.is().proposalScript() || this.is().threadOrRethreadScript() ||this.is().voteScript()
         const d3 = () => this.is().costProposalScript()
         return { d2, d3 }
     }
 
     is = () => {
+
+        const isValidNonce = (a: Command): boolean => {
+            const len = a.length()
+            return len >= 4 && len <= 8 && a.to().int().gt(0)
+        } 
+
+        const isValidVout = (a: Command, txVersion: TByte) => {
+            if (a.length() <= 8){
+                if (txVersion == 0 || a.length() >= 2) {
+                    return a.to().int().gte(0) && a.to().int().lwe(MAX_TX_OUTPUT-1)
+                }
+            }
+            return false            
+        }
+
+        const isValidAmount = (a: Command): boolean => {
+            if (a.length()== 8){
+                return a.to().int().gt(0) && a.to().int().lwe(MAX_UNIT_WRITING_COST)
+            }
+            return false
+        }
+
+        const contentWithAddress = () => {
+            try {
+                return contentScript() && 
+                isValidNonce(this[0]) && 
+                !!this[1].format().pubKH()
+            } catch (e){
+                return false
+            }
+        }
+
+        const contentWithAddressAndTarget = () => {
+            try {
+                return contentWithAddress() && 
+                !!this[2].format().pubKH()
+            } catch (e){
+                return false
+            }
+        }
+
+        const contentWithoutAddress = () => {
+            try {
+                return !contentWithAddress() && contentScript() && !!this[0].format().pubKH()
+            } catch (e){
+                return false
+            }
+        }
+
         const lockingScript = () => {
              try {
                 return this.length === Script.sizes().LOCK && 
@@ -290,45 +336,6 @@ export default class Script extends Array<Command> {
             }
        }
        
-       const targetableScript = () => this.is().onlyTargetableContentScript() || this.is().targetingAndTargetableContentScript()
-       const targetingcript = () => this.is().onlyTargetingContentScript() || this.is().targetingAndTargetableContentScript()
-
-       const targetingAndTargetableContentScript = () => {
-            try {
-                const nonce = this[0]
-                return this.is().contentScript() && 
-                nonce.length() >= 4 /* bytes as int32 or more */ &&  
-                nonce.to().int(false).gt(0) &&
-                !!this[1].format().pubKH() &&
-                !!this[2].format().pubKH()                 
-            } catch (e){
-                return false
-            }
-       }
-
-       const onlyTargetingContentScript = () => {
-            try {
-                return !targetingAndTargetableContentScript() &&
-                this.is().contentScript() &&
-                !!this[0].format().pubKH()
-            } catch(e){
-                return false
-            }
-       }
-
-       const onlyTargetableContentScript = () => {
-            try {
-                const nonce = this[0]
-                return !targetingAndTargetableContentScript() &&
-                this.is().contentScript() &&
-                nonce.length() >= 4 /* bytes as int32 or more */ &&  
-                nonce.to().int(false).gt(0) &&
-                !!this[1].format().pubKH()
-            } catch (e){
-                return false
-            }
-       }
-
        const contentScript = () => {
             try {
                 return this[this.length-1].getCodeAs().op().eq(OP_CONTENT)
@@ -339,7 +346,7 @@ export default class Script extends Array<Command> {
 
        const proposalScript = (): boolean => {
             try {
-                return this.is().onlyTargetableContentScript() &&
+                return contentWithAddress() &&
                 this.length >= Script.sizes().APPLICATION_PROPOSAL &&
                 this.length <= Script.sizes().COST_PROPOSAL_MAX && 
                 this[this.length - 2].getCodeAs().content().eq('PROPOSAL')
@@ -362,12 +369,8 @@ export default class Script extends Array<Command> {
             try {
                 if (this.is().proposalScript() && this.length === Script.sizes().COST_PROPOSAL_MIN || this.length === Script.sizes().COST_PROPOSAL_MAX){
                     let i = 2
-                    while (this[i].length() === 8){
-                        const cost = this[i].to().int()
-                        if (cost.lwe(0) || cost.gt(MAX_UNIT_WRITING_COST) || !this[i+1].getCodeAs().content('PROPOSAL', 'COSTS'))
-                             return false
+                    while (isValidAmount(this[i]) && !!this[i+1].getCodeAs().content('PROPOSAL', 'COSTS'))
                         i += 2
-                    }
                     return this[i].getCodeAs().content('PROPOSAL').eq('PROPOSAL', 'COSTS')
                 }
                 return false
@@ -386,21 +389,12 @@ export default class Script extends Array<Command> {
             }
         }
 
-        const threadD1Script = (): boolean => {
-            try {
-                return this.is().targetableScript() &&
-                (this.length === Script.sizes().THREAD || this.length === Script.sizes().RETHREAD) &&
-                this[this.length-2].getCodeAs().content().eq('THREAD')
-            } catch (e){
-                return false
-            }
-        }
-
         const threadD2Script = (): boolean => {
             try {
-                return this.is().threadD1Script() &&
+                return contentWithAddress() &&
                 this.length === Script.sizes().THREAD && 
-                this[this.length-3].getCodeAs().content('THREAD').eq('THREAD', 'THREAD')                 
+                this[this.length-3].getCodeAs().content('THREAD').eq('THREAD', 'THREAD') &&           
+                this[this.length-2].getCodeAs().content().eq('THREAD')                 
             } catch (e){
                 return false
             }
@@ -408,23 +402,28 @@ export default class Script extends Array<Command> {
 
         const rethreadD2Script = (): boolean => {
             try {
-                return this.is().threadD1Script() &&
+                return contentWithAddressAndTarget() &&
                 this.length === Script.sizes().RETHREAD && 
-                !!this[2].format().pubKH() &&
-                this[this.length-3].getCodeAs().content('THREAD').eq('THREAD', 'RETHREAD')                 
+                this[this.length-3].getCodeAs().content('THREAD').eq('THREAD', 'RETHREAD') &&
+                this[this.length-2].getCodeAs().content().eq('THREAD')                
             } catch (e){
                 return false
             }
         }
 
-        const rewardScript = (): boolean => {
+        const threadD1Script = (): boolean => {
             try {
-                const voutRedistribution = this[1]
-                return this.is().onlyTargetingContentScript() &&
+                return rethreadD2Script() || threadD2Script()
+            } catch (e){
+                return false
+            }
+        }
+
+        const rewardScript = (txVersion: TByte): boolean => {
+            try {
+                return contentWithoutAddress() &&
                 this.length === Script.sizes().REWARD &&
-                voutRedistribution.length() >= 2 &&
-                voutRedistribution.to().int().gte(0) && 
-                voutRedistribution.to().int().lwe(MAX_TX_OUTPUT-1) &&
+                isValidVout(this[1], txVersion) &&
                 this[2].getCodeAs().content().eq('REWARD')
             } catch(e){ 
                 return false
@@ -433,7 +432,7 @@ export default class Script extends Array<Command> {
 
         const voteScript = (): boolean => {
             try {
-                return this.is().onlyTargetingContentScript() &&
+                return contentWithoutAddress() &&
                 this.length === Script.sizes().VOTE &&
                 !!this[1].getCodeAs().content('VOTE') &&
                 !!this[2].getCodeAs().content().eq('VOTE')
@@ -449,22 +448,21 @@ export default class Script extends Array<Command> {
             lockingScript,
             unlockingScript,
             contentScript,
-            targetableScript,
-            targetingcript,
-            onlyTargetableContentScript,
-            onlyTargetingContentScript,
-            targetingAndTargetableContentScript,
             proposalScript,
             applicationProposalScript,
             costProposalScript,
             constitutionProposalScript,
-            threadD1Script,
-            threadD2Script,
-            rethreadD2Script,
+            threadOrRethreadScript: threadD1Script,
+            ThreadOnlyScript: threadD2Script,
+            RethreadOnlyScript: rethreadD2Script,
             rewardScript,
             voteScript,
             voteAcceptedD2,
-            voteDeclinedD2
+            voteDeclinedD2,
+
+            contentWithAddress,
+            contentWithAddressAndTarget,
+            contentWithoutAddress
         }
     }
 
@@ -507,7 +505,7 @@ export default class Script extends Array<Command> {
         return ret
     }
 
-    pretty(): string {
+    pretty = (txVersion?: TByte): string => {
 
         const nonce = (index: number) => this[index].to().int().number()
         const contentCode = (index: number, motherCategoryPath: T_CODE_NAME[]) => this[index].getCodeAs().content(...motherCategoryPath).name()
@@ -519,11 +517,10 @@ export default class Script extends Array<Command> {
 
 
         if (this.is().contentScript()){
-            let i = 0
+            let i = 2
             let str = ''
             if (this.is().proposalScript()){
                 str = `NONCE:${nonce(0)} PKH:${pkh(1)} `
-                i = 2
                 if (this.is().costProposalScript()){
                     while (this[i].length() === 8){
                         str += `${amount(i)} ${contentCode(i+1, ['PROPOSAL', 'COSTS'])} `
@@ -535,24 +532,19 @@ export default class Script extends Array<Command> {
                 }
                 str += `${contentCode(i, ['PROPOSAL'])} `
                 i++
-            } else if (this.is().threadD1Script()){
+            } else if (this.is().threadOrRethreadScript()){
                 str = `NONCE:${nonce(0)} PKH:${pkh(1)} `
-                i = 2
-                if (this.is().rethreadD2Script()){
+                if (this.is().RethreadOnlyScript()){
                     str += `TARGET_CONTENT_PKH:${pkh(i)} ` 
                     i++
                 }
                 str += `${contentCode(i, ['THREAD'])} `
                 i++
-            } else if (this.is().rewardScript()){
+            } else if (this.is().rewardScript(isNumber(txVersion) ? txVersion : LAST_TX_VERSION)){
                 str = `THREAD_PKH:${pkh(0)} VOUT_REDIS:${nonce(1)} `
-                i = 2
             } else if (this.is().voteScript()){
-                str = `PROPOSAL_PKH:${pkh(0)}`
-                str += ` ${contentCode(1, ['VOTE'])} `
-                i = 2
+                str = `PROPOSAL_PKH:${pkh(0)} ${contentCode(1, ['VOTE'])} `
             }
-
             str += `${contentCode(i, [])} `
             i++
             str += opcode(i)
@@ -580,6 +572,6 @@ const SCRIPT_LENGTH = {
     CONSTITUTION_PROPOSAL: Script.build().constitutionProposalScript(new Inv.InvBigInt(1), Inv.PubKH.random(), [{title: 'Title', content: 'Rule'}]).length,
     THREAD: Script.build().threadScript(new Inv.InvBigInt(1), Inv.PubKH.random()).length,
     RETHREAD: Script.build().rethreadScript(new Inv.InvBigInt(1), Inv.PubKH.random(), Inv.PubKH.random()).length,
-    REWARD: Script.build().rewardScript(Inv.PubKH.random(), new Inv.InvBigInt(3)).length,
+    REWARD: Script.build().rewardScript(Inv.PubKH.random(), new Inv.InvBigInt(3), LAST_TX_VERSION).length,
     VOTE: Script.build().voteScript(Inv.PubKH.random(), true).length
 }

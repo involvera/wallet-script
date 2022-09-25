@@ -13,3 +13,5 @@ export const PUBKEY_H_BURNER = BytesToHex(new Uint8Array([48,48,48,48,48,48,48,4
 
 export const MAX_UNIT_WRITING_COST = 15 * LUGH_AMOUNT
 export const MAX_TX_OUTPUT = 1000
+
+export const LAST_TX_VERSION: TByte = 1
