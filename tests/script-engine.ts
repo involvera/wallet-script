@@ -6,8 +6,8 @@ import ContentCode, { T_CODE_NAME } from '../src/content-code';
 import Script from '../src/script'
 
 import { NOT_A_CONSTITUTION_PROPOSAL, NOT_A_COST_PROPOSAL, NOT_A_LOCK_SCRIPT, NOT_A_REWARD_SCRIPT, NOT_A_TARGETABLE_CONTENT, NOT_A_TARGETING_CONTENT } from '../src/errors';
-import { PUBKEY_H_BURNER } from '../src/constant';
-import { NewConstitution, SerializeConstitution } from '../src/constitution';
+import { LAST_TX_VERSION, PUBKEY_H_BURNER, TByte } from '../src/constant';
+import { DeserializeConstitution, NewConstitution, SerializeConstitution, TConstitution } from '../src/constitution';
 import { Inv } from 'wallet-util'
 const {
     InvBuffer,
@@ -22,647 +22,518 @@ const cc = (...path: T_CODE_NAME[]) => new ContentCode(...path).bytes()
 const op = (code: T_OPCODE) => new Opcode(code as any).bytes()
 
 //data
-const THREAD_PRICE = InvBuffer.fromNumber(3_000_000, 'uint64').bytes()
-const PROPOSAL_PRICE = InvBuffer.fromNumber(5_000_000, 'uint64').bytes()
+const THREAD_PRICE = new Inv.InvBigInt(3_000_000)
+const PROPOSAL_PRICE = new Inv.InvBigInt(5_000_000)
 const VOUT = new Inv.InvBigInt(1)
 const NONCE = new Inv.InvBigInt(5)
 const PUBKH_BUFFER = InvBuffer.fromHex('93ce48570b55c42c2af816aeaba06cfee1224fae').bytes()
 const PUBK_BUFFER = new Uint8Array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
 const SIGNATURE_BUFFER = InvBuffer.fromHex('3046022100ceadf41cc9f116107c38f56b4a77b86632b521cd03621ca962fc6e0c8dec3966022100aca63c2a4435f71e4510ff3ba62e285acf1a9c9f49d826ce5c6c9346e08cba77').bytes()
 
+interface Is {
+	applicationProposal?:         boolean
+	constitutionProposal?:         boolean
+	content?:                              boolean
+	contentWithAddress    ?:                boolean
+	contentWithAddressAndTarget? :         boolean
+	contentWithoutAddress      ? :         boolean
+	costsProposal               ?:         boolean
+	lock                        ?:         boolean
+	proposal                    ?:         boolean
+	rethreadOnly                ?:         boolean
+	reward                      ?:         boolean
+	threadOnly                  ?:         boolean
+	threadOrRethread            ?:         boolean
+	unlock                      ?:         boolean
+	vote                        ?:         boolean
+	voteAccepted                ?:         boolean
+	voteDeclined                ?:         boolean
+}
 
-//Scripts
+interface Parse {
+    contentNonce?: undefined | Inv.InvBigInt
+    pubkh?: Inv.PubKH | undefined
+    contentPKH?:  Inv.PubKH | undefined
+    targetPKH?:  Inv.PubKH | undefined
+    constitution?: TConstitution | undefined
+    proposalCosts?: {thread: Inv.InvBigInt, proposal: Inv.InvBigInt} | undefined
+    distributionVout?: Inv.InvBigInt | undefined
+}
+
+interface scriptTesting {
+    shouldEq?: Script[]
+    shouldNotEq?: Script[]
+    type?: TByte
+    typeString?: T_CODE_NAME | 'REGULAR'
+    hasD3?: boolean
+    typeD2?: T_CODE_NAME | null
+    size?: number
+    parse?: Parse
+    is?: Is
+    str?: string
+}
+
+const newEmptyScriptTesting = (settings: scriptTesting): scriptTesting => {
+    const o: scriptTesting = {
+        shouldEq: [],
+        shouldNotEq: [],
+        type: 0,
+        typeString: 'REGULAR',
+        hasD3: false,
+        typeD2: null,
+        size: 0,
+        parse: {},
+        is: {
+            applicationProposal:         false,
+            constitutionProposal:         false,
+            content :                              false,
+            contentWithAddress    :                false,
+            contentWithAddressAndTarget :         false,
+            contentWithoutAddress       :         false,
+            costsProposal               :         false,
+            lock                        :         false,
+            proposal                    :         false,
+            rethreadOnly                :         false,
+            reward                      :         false,
+            threadOnly                  :         false,
+            threadOrRethread            :         false,
+            unlock                      :         false,
+            vote                        :         false,
+            voteAccepted                :         false,
+            voteDeclined                :         false,
+        },
+        str: ''
+    } as scriptTesting
+
+    const ret = Object.assign({}, o, settings)
+    const is = Object.assign({}, o.is, settings.is)
+    const parse = Object.assign({}, o.parse, settings.parse)
+
+    ret.is = is
+    ret.parse = parse
+    return ret
+}
+
+
+const doTest = (s: Script, st: scriptTesting, version: TByte) => {
+    if (st.shouldEq){
+        for (const sd of st.shouldEq){
+            expect(sd.eq(s)).to.eq(true)
+        }
+    }
+    if (st.shouldNotEq){
+        for (const sd of st.shouldNotEq){
+            expect(sd.eq(s)).to.eq(false)
+        }
+    }    
+
+    expect(s.copy().eq(s)).to.eq(true)
+    expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
+    expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
+    expect(s.pretty(version)).to.eq(st.str)
+    expect(s.type()).to.eq(st.type)
+    expect(s.typeString()).to.eq(st.typeString)
+    expect(s.has().d3()).to.eq(st.hasD3)
+    expect(s.typeD2()).to.eq(st.typeD2)
+    expect(s.has().d2()).to.eq(st.typeD2 != null)
+    expect(s.fullSizeOctet()).to.eq(st.size)
+
+
+    const p = s.parse()
+    const { parse } = st
+    if (parse){
+
+        if (parse.pubkh) 
+            expect(p.PKHFromLockScript().hex()).to.eq(parse.pubkh.hex())
+        else 
+            expect(() => p.PKHFromLockScript()).to.throw(NOT_A_LOCK_SCRIPT.message)
+        
+        if (parse.constitution)
+            expect(p.constitution().toString()).to.eq(parse.constitution.toString())
+        else 
+            expect(() => p.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
+        
+        if (parse.contentNonce)
+            expect(p.contentNonce().big()).to.eq(parse.contentNonce.big())
+        else
+            expect(() => p.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
+
+        if (parse.contentPKH)
+            expect(p.PKHFromContentScript().hex()).to.eq(parse.contentPKH.hex())
+        else
+            expect(() => p.PKHFromContentScript()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
+
+        if (parse.distributionVout)
+            expect(p.distributionVout(version).number()).to.eq(parse.distributionVout.number())
+        else 
+            expect(() => p.distributionVout(version)).to.throw(NOT_A_REWARD_SCRIPT.message)
+
+        if (parse.proposalCosts){
+            expect(p.proposalCosts().proposal.big()).to.eq(parse.proposalCosts.proposal.big())
+            expect(p.proposalCosts().thread.big()).to.eq(parse.proposalCosts.thread.big())
+        } else
+            expect(() => p.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
+
+        if (parse.targetPKH)
+            expect(p.targetPKHFromContentScript().hex()).to.eq(parse.targetPKH.hex())
+        else
+            expect(() => p.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
+    }
+
+    const is = s.is()
+    if (st.is){
+        const { 
+            lock, unlock, content, proposal, costsProposal, 
+            applicationProposal, constitutionProposal, rethreadOnly, 
+            threadOrRethread, threadOnly, reward, vote, voteAccepted, 
+            voteDeclined, contentWithAddress, contentWithAddressAndTarget,
+            contentWithoutAddress
+        } = st.is    
+
+        expect(is.lockingScript()).to.eq(lock)
+        expect(is.unlockingScript()).to.eq(unlock)
+        expect(is.contentScript()).to.eq(content)
+        expect(is.proposalScript()).to.eq(proposal)
+        expect(is.costProposalScript()).to.eq(costsProposal)
+        expect(is.applicationProposalScript()).to.eq(applicationProposal)
+        expect(is.constitutionProposalScript()).to.eq(constitutionProposal)
+        expect(is.threadOrRethreadScript()).to.eq(threadOrRethread)
+        expect(is.ThreadOnlyScript()).to.eq(threadOnly)
+        expect(is.RethreadOnlyScript()).to.eq(rethreadOnly)
+        expect(is.rewardScript(version)).to.eq(reward)
+        expect(is.voteScript()).to.eq(vote)
+        expect(is.voteAcceptedD2()).to.eq(voteAccepted)
+        expect(is.voteDeclinedD2()).to.eq(voteDeclined)
+        expect(is.contentWithAddress()).to.eq(contentWithAddress)
+        expect(is.contentWithAddressAndTarget()).to.eq(contentWithAddressAndTarget)
+        expect(is.contentWithoutAddress()).to.eq(contentWithoutAddress)
+    }
+} 
+
 describe('Testing script-engine', () => {
-
-    it('Lock', () => {
-        const LOCK_SCRIPT: Uint8Array[] = [op(OP_DUP), op(OP_HASH160), PUBKH_BUFFER, op(OP_EQUALVERIFY), op(OP_CHECKSIG)]
-
-        const s = Script.build().lockScript(new Inv.PubKH(PUBKH_BUFFER))
-        expect(s.bytes().toLocaleString()).to.eq(LOCK_SCRIPT.toLocaleString())
-        expect(s.type()).to.eq(0)
-        expect(s.typeString()).to.eq('REGULAR')
-        expect(s.typeD2()).to.eq(null)
-        expect(s.fullSizeOctet()).to.eq(29)
     
-        const parse = s.parse()
-        expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
-        expect(parse.PKHFromLockScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.PKHFromContentScript()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
-        expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
+    it('Lock', () => {
+        const LOCK_SCRIPT = Script.new([op(OP_DUP), op(OP_HASH160), PUBKH_BUFFER, op(OP_EQUALVERIFY), op(OP_CHECKSIG)])
+        const s = Script.build().lockScript(new Inv.PubKH(PUBKH_BUFFER))
 
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(true)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(false)
-        expect(is.proposalScript()).to.eq(false)
-        expect(is.costProposalScript()).to.eq(false)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(false)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(false)
-        expect(is.onlyTargetingContentScript()).to.eq(false)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(false)
-        expect(is.targetingcript()).to.eq(false)
-        expect(`OP_DUP OP_HASH160 93ce48570b55c42c2af816aeaba06cfee1224fae OP_EQUALVERIFY OP_CHECKSIG`).to.eq(s.pretty())
-
-
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(false)
-        expect(s.has().d3()).to.eq(false)
-    });
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            doTest(s, newEmptyScriptTesting({
+                shouldEq: [LOCK_SCRIPT],
+                type: 0,
+                size: 29,
+                parse: {
+                    pubkh: new Inv.PubKH(PUBKH_BUFFER),
+                },
+                is: {
+                    lock: true,
+                },
+                str: 'OP_DUP OP_HASH160 93ce48570b55c42c2af816aeaba06cfee1224fae OP_EQUALVERIFY OP_CHECKSIG',            
+            }), ver as TByte)
+        }
+    })
 
     it('Unlocking', () => {
-        const UNLOCK_SCRIPT: Uint8Array[] = [SIGNATURE_BUFFER, PUBK_BUFFER]
-
+        const UNLOCK_SCRIPT = Script.new([SIGNATURE_BUFFER, PUBK_BUFFER])
         const s = Script.build().unlockScript(new Inv.Signature(SIGNATURE_BUFFER), new Inv.PubKey(PUBK_BUFFER))
-        expect(s.bytes().toString()).to.eq(UNLOCK_SCRIPT.toString())
-        expect(s.type()).to.eq(0)
-        expect(s.typeString()).to.eq('REGULAR')
-        expect(s.typeD2()).to.eq(null)
-        expect(s.fullSizeOctet()).to.eq(107)
-    
-        const parse = s.parse()
-        expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
-        expect(() => parse.PKHFromLockScript()).to.throw(NOT_A_LOCK_SCRIPT.message)
-        expect(() => parse.PKHFromContentScript()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
-        expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
-
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(true)
-        expect(is.contentScript()).to.eq(false)
-        expect(is.proposalScript()).to.eq(false)
-        expect(is.costProposalScript()).to.eq(false)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(false)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(false)
-        expect(is.onlyTargetingContentScript()).to.eq(false)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(false)
-        expect(is.targetingcript()).to.eq(false)
-        expect(`SIGNATURE:3046022100ceadf41cc9f116107c38f56b4a77b86632b521cd03621ca962fc6e0c8dec3966022100aca63c2a4435f71e4510ff3ba62e285acf1a9c9f49d826ce5c6c9346e08cba77 PUBLIC_KEY:000000000000000000000000000000000000000000000000000000000000000000`).to.eq(s.pretty())
-
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(false)
-        expect(s.has().d3()).to.eq(false)
-    });
-
+        
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            doTest(s, newEmptyScriptTesting({
+                shouldEq: [UNLOCK_SCRIPT],
+                type: 0,
+                size: 107,
+                is: {
+                    unlock: true,
+                },
+                str: 'SIGNATURE:3046022100ceadf41cc9f116107c38f56b4a77b86632b521cd03621ca962fc6e0c8dec3966022100aca63c2a4435f71e4510ff3ba62e285acf1a9c9f49d826ce5c6c9346e08cba77 PUBLIC_KEY:000000000000000000000000000000000000000000000000000000000000000000',            
+            }), ver as TByte)
+        }
+    })
 
     it('Application Proposal', () => {
-        const APPLICATION_PROPOSAL_SCRIPT: Uint8Array[] = [NONCE.bytes('int32').bytes(), PUBKH_BUFFER, cc('PROPOSAL', 'APPLICATION'), cc('PROPOSAL'), op(OP_CONTENT)]
+        const APPLICATION_PROPOSAL_SCRIPT = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, cc('PROPOSAL', 'APPLICATION'), cc('PROPOSAL'), op(OP_CONTENT)])
         const s = Script.build().applicationProposal(NONCE, new Inv.PubKH(PUBKH_BUFFER))
-        expect(s.bytes().toString()).to.eq(APPLICATION_PROPOSAL_SCRIPT.toString())
-        expect(s.type()).to.eq(1)
-        expect(s.typeString()).to.eq('PROPOSAL')
-        expect(s.typeD2()).to.eq('APPLICATION')
-        expect(s.fullSizeOctet()).to.eq(32)
-    
-        const parse = s.parse()
-        expect(parse.contentNonce().big()).to.eq(NONCE.big())
-        expect(parse.PKHFromLockScript().to().string().hex() ).to.eq(PUBKEY_H_BURNER)
-        expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
+        
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            doTest(s, newEmptyScriptTesting({
+                shouldEq: [APPLICATION_PROPOSAL_SCRIPT],
+                type: 1,
+                typeString: 'PROPOSAL',
+                typeD2: 'APPLICATION',
+                size: 32,
+                is: {
+                    proposal: true,
+                    applicationProposal: true,
+                    content: true,
+                    contentWithAddress: true
+                },
+                parse: {
+                    pubkh: Inv.PubKH.fromHex(PUBKEY_H_BURNER),
+                    contentPKH: new Inv.PubKH(PUBKH_BUFFER),
+                    contentNonce: NONCE,
+                },
+                str: 'NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae APPLICATION PROPOSAL OP_CONTENT',
+            }), ver as TByte)
+        }
+    })
 
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(true)
-        expect(is.proposalScript()).to.eq(true)
-        expect(is.costProposalScript()).to.eq(false)
-        expect(is.applicationProposalScript()).to.eq(true)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(false)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(true)
-        expect(is.onlyTargetingContentScript()).to.eq(false)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(true)
-        expect(is.targetingcript()).to.eq(false)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae APPLICATION PROPOSAL OP_CONTENT`).to.eq(s.pretty())
+    it('Proposal Cost', () => {
+        const COST_PROPOSAL_SCRIPT_PCHANGE = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, PROPOSAL_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+        const COST_PROPOSAL_SCRIPT_TCHANGE = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+        const COST_PROPOSAL_SCRIPT_BOTHCHANGE = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  PROPOSAL_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
 
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(true)
-        expect(s.has().d3()).to.eq(false)
-    });
+        let testing = newEmptyScriptTesting({
+            type: 1,
+            typeString: 'PROPOSAL',
+            typeD2: 'COSTS',
+            hasD3: true,
+            is: {
+                proposal: true,
+                costsProposal: true,
+                content: true,
+                contentWithAddress: true
+            },
+            parse: {
+                pubkh: Inv.PubKH.fromHex(PUBKEY_H_BURNER),
+                contentPKH: new Inv.PubKH(PUBKH_BUFFER),
+                contentNonce: NONCE,
+            },
+        })
 
-    it('Proposal Cost - Thread price update', () => {
-        const COST_PROPOSAL_SCRIPT_TCHANGE: Uint8Array[] = [NONCE.bytes('int32').bytes(), PUBKH_BUFFER, THREAD_PRICE, cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)]
-        const COST_PROPOSAL_SCRIPT_TCHANGE_WRONG: Uint8Array[] = [NONCE.bytes('int8').bytes(), PUBKH_BUFFER, InvBuffer.fromNumber(3_000_000, 'uint32').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)]
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            testing = Object.assign(testing, {shouldEq: [COST_PROPOSAL_SCRIPT_TCHANGE], size: 43, str: "NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 3000000 THREAD_PRICE COSTS PROPOSAL OP_CONTENT"})
+            testing.parse = Object.assign({}, testing.parse, {proposalCosts: { proposal: new Inv.InvBigInt(0), thread: THREAD_PRICE } } )
+            doTest(
+                Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), THREAD_PRICE, new Inv.InvBigInt(0)),
+                testing,
+                ver as TByte
+            )
+            testing = Object.assign(testing, {shouldEq: [COST_PROPOSAL_SCRIPT_PCHANGE], size: 43, str: "NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 5000000 PROPOSAL_PRICE COSTS PROPOSAL OP_CONTENT"})
+            testing.parse = Object.assign({}, testing.parse, {proposalCosts: { proposal: PROPOSAL_PRICE, thread: new Inv.InvBigInt(0) } } )
+            doTest(
+                Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new Inv.InvBigInt(0), PROPOSAL_PRICE),
+                testing,
+                ver as TByte
+            )
+            testing = Object.assign(testing, {shouldEq: [COST_PROPOSAL_SCRIPT_BOTHCHANGE], size: 54, str: "NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 3000000 THREAD_PRICE 5000000 PROPOSAL_PRICE COSTS PROPOSAL OP_CONTENT"})
+            testing.parse = Object.assign({}, testing.parse, {proposalCosts: { proposal: PROPOSAL_PRICE, thread: THREAD_PRICE } } )
+            doTest(
+                Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), THREAD_PRICE, PROPOSAL_PRICE),
+                testing,
+                ver as TByte
+            )
+        }
+    })
 
-        const s2 = Script.fromArrayBytes(COST_PROPOSAL_SCRIPT_TCHANGE_WRONG)
-        expect(s2.typeString()).to.eq('PROPOSAL')
-        expect(s2.typeD2()).to.eq(null)
-        const parse2 = s2.parse()
-        expect(() => parse2.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL)
-        expect(() => parse2.contentNonce().big()).to.throw(NOT_A_TARGETABLE_CONTENT)
-
-        const s = Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new InvBuffer(THREAD_PRICE).to().int(false), new Inv.InvBigInt(-1))
-        expect(s.bytes().toString()).to.eq(COST_PROPOSAL_SCRIPT_TCHANGE.toString())
-        expect(s.type()).to.eq(1)
-        expect(s.typeString()).to.eq('PROPOSAL')
-        expect(s.typeD2()).to.eq('COSTS')
-        expect(s.fullSizeOctet()).to.eq(43)
-    
-        const parse = s.parse()
-        expect(parse.contentNonce().big()).to.eq(NONCE.big())
-        expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-        expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(parse.proposalCosts().proposal.number()).to.eq(-1)
-        expect(parse.proposalCosts().thread.big()).to.eq(new InvBuffer(THREAD_PRICE).to().int(false).big())
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
-
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(true)
-        expect(is.proposalScript()).to.eq(true)
-        expect(is.costProposalScript()).to.eq(true)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(false)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(true)
-        expect(is.onlyTargetingContentScript()).to.eq(false)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(true)
-        expect(is.targetingcript()).to.eq(false)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 3000000 THREAD_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.pretty())
-
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(true)
-        expect(s.has().d3()).to.eq(true)
-    });
-
-    it('Proposal Cost - Proposal price update', () => {
-        const COST_PROPOSAL_SCRIPT_PCHANGE: Uint8Array[] = [NONCE.bytes('int32').bytes(), PUBKH_BUFFER, PROPOSAL_PRICE, cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)]
-
-        const s = Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new Inv.InvBigInt(-1), new InvBuffer(PROPOSAL_PRICE).to().int(false))
-        expect(s.bytes().toString()).to.eq(COST_PROPOSAL_SCRIPT_PCHANGE.toString())
-        expect(s.type()).to.eq(1)
-        expect(s.typeString()).to.eq('PROPOSAL')
-        expect(s.typeD2()).to.eq('COSTS')
-        expect(s.fullSizeOctet()).to.eq(43)
-    
-        const parse = s.parse()
-        expect(parse.contentNonce().big()).to.eq(NONCE.big())
-        expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-        expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(parse.proposalCosts().thread.number()).to.eq(-1)
-        expect(parse.proposalCosts().proposal.big()).to.eq(new InvBuffer(PROPOSAL_PRICE).to().int(false).big())
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
-
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(true)
-        expect(is.proposalScript()).to.eq(true)
-        expect(is.costProposalScript()).to.eq(true)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(false)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(true)
-        expect(is.onlyTargetingContentScript()).to.eq(false)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(true)
-        expect(is.targetingcript()).to.eq(false)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 5000000 PROPOSAL_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.pretty())
-
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(true)
-        expect(s.has().d3()).to.eq(true)
-    });
-
-
-    it('Proposal Cost - Proposal & Thread price update', () => {
-        const COST_PROPOSAL_SCRIPT_BOTHCHANGE: Uint8Array[] = [NONCE.bytes('int32').bytes(), PUBKH_BUFFER, THREAD_PRICE, cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  PROPOSAL_PRICE, cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)]
-
-        const s = Script.build().costProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new InvBuffer(THREAD_PRICE).to().int(false), new InvBuffer(PROPOSAL_PRICE).to().int(false))
-        expect(s.bytes().toString()).to.eq(COST_PROPOSAL_SCRIPT_BOTHCHANGE.toString())
-        expect(s.type()).to.eq(1)
-        expect(s.typeString()).to.eq('PROPOSAL')
-        expect(s.typeD2()).to.eq('COSTS')
-        expect(s.fullSizeOctet()).to.eq(54)
-    
-    
-        const parse = s.parse()
-        expect(parse.contentNonce().big()).to.eq(NONCE.big())
-        expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-        expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(parse.proposalCosts().thread.big()).to.eq(new InvBuffer(THREAD_PRICE).to().int(false).big())
-        expect(parse.proposalCosts().proposal.big()).to.eq(new InvBuffer(PROPOSAL_PRICE).to().int(false).big())
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
-
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(true)
-        expect(is.proposalScript()).to.eq(true)
-        expect(is.costProposalScript()).to.eq(true)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(false)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(true)
-        expect(is.onlyTargetingContentScript()).to.eq(false)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(true)
-        expect(is.targetingcript()).to.eq(false)
-
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae 3000000 THREAD_PRICE 5000000 PROPOSAL_PRICE COSTS PROPOSAL OP_CONTENT`).to.eq(s.pretty())
-
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(true)
-        expect(s.has().d3()).to.eq(true)
-    });
-    
     it('Proposal Constitution', () => {
-        const CONSTITUTION_PROPOSAL_SCRIPT: Uint8Array[] = [NONCE.bytes('int32').bytes(), PUBKH_BUFFER, SerializeConstitution(NewConstitution()).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)]
+        const CONSTITUTION_PROPOSAL_SCRIPT = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, SerializeConstitution(NewConstitution()).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
 
         const s = Script.build().constitutionProposalScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), NewConstitution())
-        expect(s.bytes().toString()).to.eq(CONSTITUTION_PROPOSAL_SCRIPT.toString())
-        expect(s.type()).to.eq(1)
-        expect(s.typeString()).to.eq('PROPOSAL')
-        expect(s.typeD2()).to.eq('CONSTITUTION')
-        expect(s.fullSizeOctet()).to.eq(81)
 
-        const parse = s.parse()
-        expect(parse.contentNonce().big()).to.eq(NONCE.big())
-        expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-        expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
-        expect(parse.constitution().toString()).to.eq(NewConstitution().toString())
-        expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
-
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(true)
-        expect(is.proposalScript()).to.eq(true)
-        expect(is.costProposalScript()).to.eq(false)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(true)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(false)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(true)
-        expect(is.onlyTargetingContentScript()).to.eq(false)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(true)
-        expect(is.targetingcript()).to.eq(false)
-
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(true)
-        expect(s.has().d3()).to.eq(false)
-    });
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            doTest(s, newEmptyScriptTesting({
+                shouldEq: [CONSTITUTION_PROPOSAL_SCRIPT],
+                type: 1,
+                typeString: 'PROPOSAL',
+                typeD2: 'CONSTITUTION',
+                size: 81,
+                is: {
+                    proposal: true,
+                    constitutionProposal: true,
+                    content: true,
+                    contentWithAddress: true
+                },
+                parse: {
+                    pubkh: Inv.PubKH.fromHex(PUBKEY_H_BURNER),
+                    contentPKH: new Inv.PubKH(PUBKH_BUFFER),
+                    contentNonce: NONCE,
+                    constitution: NewConstitution()
+                },
+                str: `NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae CONSTITUTION:${JSON.stringify(NewConstitution())} CONSTITUTION PROPOSAL OP_CONTENT`,
+            }), ver as TByte)
+        }
+    })
 
     it('Thread', () => {
-        const THREAD_SCRIPT: Uint8Array[] = [NONCE.bytes('int32').bytes(), PUBKH_BUFFER, cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)]
-        const THREAD_SCRIPT_WRONG: Uint8Array[] = [NONCE.bytes('int16').bytes(), PUBKH_BUFFER, cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)]
-        const THREAD_SCRIPT_INT64: Uint8Array[] = [NONCE.bytes('int64').bytes(), PUBKH_BUFFER, cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)]
+        const THREAD_SCRIPT = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)])
 
-        const s = Script.build().threadScript(NONCE, new Inv.PubKH(PUBKH_BUFFER))
-        expect(s.fullSizeOctet()).to.eq(32)
-        expect(s.bytes().toString()).to.eq(THREAD_SCRIPT.toString())
-
-        const s2 = Script.fromArrayBytes(THREAD_SCRIPT_WRONG)
-        expect(s2.is().threadD1Script()).to.eq(false)
-
-        const s3 = Script.fromArrayBytes(THREAD_SCRIPT_INT64)
-        expect(s3.bytes().toString()).to.eq(THREAD_SCRIPT_INT64.toString())
-        expect(s3.fullSizeOctet()).to.eq(36)
-    
-        const docheck = (s: Script) => {
-            expect(s.type()).to.eq(2)
-            expect(s.typeString()).to.eq('THREAD')
-            expect(s.typeD2()).to.eq('THREAD')
-
-            const parse = s.parse()
-            expect(parse.contentNonce().big()).to.eq(NONCE.big())
-            expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-            expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-            expect(() => parse.targetPKHFromContentScript()).to.throw(NOT_A_TARGETING_CONTENT.message)
-            expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-            expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-            expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
-    
-            const is = s.is()
-            expect(is.lockingScript()).to.eq(false)
-            expect(is.unlockingScript()).to.eq(false)
-            expect(is.contentScript()).to.eq(true)
-            expect(is.proposalScript()).to.eq(false)
-            expect(is.costProposalScript()).to.eq(false)
-            expect(is.applicationProposalScript()).to.eq(false)
-            expect(is.constitutionProposalScript()).to.eq(false)
-            expect(is.threadD1Script()).to.eq(true)
-            expect(is.threadD2Script()).to.eq(true)
-            expect(is.rethreadD2Script()).to.eq(false)
-            expect(is.rewardScript()).to.eq(false)
-            expect(is.voteScript()).to.eq(false)
-            expect(is.voteAcceptedD2()).to.eq(false)
-            expect(is.voteDeclinedD2()).to.eq(false)
-            expect(is.onlyTargetableContentScript()).to.eq(true)
-            expect(is.onlyTargetingContentScript()).to.eq(false)
-            expect(is.targetingAndTargetableContentScript()).to.eq(false)
-            expect(is.targetableScript()).to.eq(true)
-            expect(is.targetingcript()).to.eq(false)
-            expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae THREAD THREAD OP_CONTENT`).to.eq(s.pretty())
-    
-            expect(s.copy().eq(s)).to.eq(true)
-            expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-            expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-            expect(s.has().d2()).to.eq(true)
-            expect(s.has().d3()).to.eq(false)
+        let testing = newEmptyScriptTesting({
+            type: 2,
+            size: 32,
+            shouldEq: [THREAD_SCRIPT],
+            typeString: 'THREAD',
+            typeD2: 'THREAD',
+            is: {
+                threadOrRethread: true,
+                threadOnly: true,
+                content: true,
+                contentWithAddress: true
+            },
+            parse: {
+                pubkh: Inv.PubKH.fromHex(PUBKEY_H_BURNER),
+                contentPKH: new Inv.PubKH(PUBKH_BUFFER),
+                contentNonce: NONCE
+            },
+            str: "NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae THREAD THREAD OP_CONTENT",
+        })
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            doTest(
+                Script.build().threadScript(NONCE, new Inv.PubKH(PUBKH_BUFFER)),
+                testing,
+                ver as TByte
+            )
         }
+    })
 
-        docheck(s)
-        docheck(s3)
-     
-    });
+    it('Rethread', () => {
+        const RETHREAD_SCRIPT = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, PUBKH_BUFFER, cc('THREAD', 'RETHREAD'), cc('THREAD'), op(OP_CONTENT)])
+        let testing = newEmptyScriptTesting({
+            type: 2,
+            size: 53,
+            shouldEq: [RETHREAD_SCRIPT],
+            typeString: 'THREAD',
+            typeD2: 'RETHREAD',
+            is: {
+                threadOrRethread: true,
+                rethreadOnly: true,
+                content: true,
+                contentWithAddress: true,
+                contentWithAddressAndTarget: true
+            },
+            parse: {
+                pubkh: Inv.PubKH.fromHex(PUBKEY_H_BURNER),
+                contentPKH: new Inv.PubKH(PUBKH_BUFFER),
+                contentNonce: NONCE,
+                targetPKH: new Inv.PubKH(PUBKH_BUFFER),
+            },
+            str: "NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae TARGET_CONTENT_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae RETHREAD THREAD OP_CONTENT",
+        })
 
-
-    it('Re-Thread', () => {
-        const RETHREAD_SCRIPT: Uint8Array[] = [NONCE.bytes('int32').bytes(), PUBKH_BUFFER, PUBKH_BUFFER, cc('THREAD', 'RETHREAD'), cc('THREAD'), op(OP_CONTENT)]
-
-        const s = Script.build().rethreadScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new Inv.PubKH(PUBKH_BUFFER))
-        expect(s.bytes().toString()).to.eq(RETHREAD_SCRIPT.toString())
-        expect(s.type()).to.eq(2)
-        expect(s.typeString()).to.eq('THREAD')
-        expect(s.typeD2()).to.eq('RETHREAD')
-        expect(s.fullSizeOctet()).to.eq(53)
-    
-        const parse = s.parse()
-        expect(parse.contentNonce().big()).to.eq(NONCE.big())
-        expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-        expect(parse.PKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(parse.targetPKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
-
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(true)
-        expect(is.proposalScript()).to.eq(false)
-        expect(is.costProposalScript()).to.eq(false)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(true)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(true)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(false)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(false)
-        expect(is.onlyTargetingContentScript()).to.eq(false)
-        expect(is.targetingAndTargetableContentScript()).to.eq(true)
-        expect(is.targetableScript()).to.eq(true)
-        expect(is.targetingcript()).to.eq(true)
-        expect(`NONCE:5 PKH:93ce48570b55c42c2af816aeaba06cfee1224fae TARGET_CONTENT_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae RETHREAD THREAD OP_CONTENT`).to.eq(s.pretty())
-
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(true)
-        expect(s.has().d3()).to.eq(false)
-    });
-
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            doTest(
+                Script.build().rethreadScript(NONCE, new Inv.PubKH(PUBKH_BUFFER), new Inv.PubKH(PUBKH_BUFFER)),
+                testing,
+                ver as TByte
+            )
+        }
+    })
 
     it('Reward', () => {
-        const REWARD_SCRIPT: Uint8Array[] = [PUBKH_BUFFER, VOUT.bytes('int16').bytes(), cc('REWARD'), op(OP_CONTENT)]
-        const REWARD_SCRIPT_OLD: Uint8Array[] = [PUBKH_BUFFER, VOUT.bytes('int32').bytes(), cc('REWARD'), op(OP_CONTENT)]
-        const REWARD_SCRIPT_WRONG: Uint8Array[] = [PUBKH_BUFFER, VOUT.bytes('int8').bytes(), cc('REWARD'), op(OP_CONTENT)]
-        const REWARD_SCRIPT_INT64: Uint8Array[] = [PUBKH_BUFFER, VOUT.bytes('int64').bytes(), cc('REWARD'), op(OP_CONTENT)]
+        let testing = newEmptyScriptTesting({
+            shouldEq: [Script.new([PUBKH_BUFFER, VOUT.bytes('int16').bytes(), cc('REWARD'), op(OP_CONTENT)])],
+            type: 3,
+            size: 2,
+            typeString: 'REWARD',
+            typeD2: null,
+            is: {
+                content: true,
+                reward: true,
+                contentWithoutAddress: true
+            },
+            parse: {
+                pubkh: Inv.PubKH.fromHex(PUBKEY_H_BURNER),
+                targetPKH: new Inv.PubKH(PUBKH_BUFFER),
+                distributionVout: VOUT
+            },
+            str: "THREAD_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae VOUT_REDIS:1 REWARD OP_CONTENT",
+        })
 
-        const s1 = Script.build().rewardScript(new Inv.PubKH(PUBKH_BUFFER), VOUT)
-        expect(s1.bytes().toString()).to.eq(REWARD_SCRIPT.toString())
-        expect(s1.fullSizeOctet()).to.eq(28)
-        const s2 = Script.fromArrayBytes(REWARD_SCRIPT_OLD)
-        expect(s2.bytes().toString()).to.eq(REWARD_SCRIPT_OLD.toString())
-        expect(s2.fullSizeOctet()).to.eq(30)
-        const s3 = Script.fromArrayBytes(REWARD_SCRIPT_WRONG)
-        expect(s3.is().rewardScript()).to.eq(false)
-        const s4 = Script.fromArrayBytes(REWARD_SCRIPT_INT64)
-        expect(s4.bytes().toString()).to.eq(REWARD_SCRIPT_INT64.toString())
-        expect(s4.fullSizeOctet()).to.eq(34)
-
-
-        const docheck = (s: Script) => {
-            expect(s.type()).to.eq(3)
-            expect(s.typeString()).to.eq('REWARD')
-            expect(s.typeD2()).to.eq(null)
-    
-            const parse = s.parse()
-            expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
-            expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-            expect(() => parse.PKHFromContentScript()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
-            expect(parse.targetPKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-            expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-            expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-            expect(parse.distributionVout().number()).to.eq(VOUT.number())
-    
-            const is = s.is()
-            expect(is.lockingScript()).to.eq(false)
-            expect(is.unlockingScript()).to.eq(false)
-            expect(is.contentScript()).to.eq(true)
-            expect(is.proposalScript()).to.eq(false)
-            expect(is.costProposalScript()).to.eq(false)
-            expect(is.applicationProposalScript()).to.eq(false)
-            expect(is.constitutionProposalScript()).to.eq(false)
-            expect(is.threadD1Script()).to.eq(false)
-            expect(is.threadD2Script()).to.eq(false)
-            expect(is.rethreadD2Script()).to.eq(false)
-            expect(is.rewardScript()).to.eq(true)
-            expect(is.voteScript()).to.eq(false)
-            expect(is.voteAcceptedD2()).to.eq(false)
-            expect(is.voteDeclinedD2()).to.eq(false)
-            expect(is.onlyTargetableContentScript()).to.eq(false)
-            expect(is.onlyTargetingContentScript()).to.eq(true)
-            expect(is.targetingAndTargetableContentScript()).to.eq(false)
-            expect(is.targetableScript()).to.eq(false)
-            expect(is.targetingcript()).to.eq(true)
-            expect(`THREAD_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae VOUT_REDIS:1 REWARD OP_CONTENT`).to.eq(s.pretty())
-    
-            expect(s.copy().eq(s)).to.eq(true)
-            expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-            expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-            expect(s.has().d2()).to.eq(false)
-            expect(s.has().d3()).to.eq(false)
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            const s = Script.build().rewardScript(new Inv.PubKH(PUBKH_BUFFER), VOUT, ver as TByte)
+            doTest(s, Object.assign(testing, {size: s.fullSizeOctet()}), ver as TByte)
         }
+    })
 
-        docheck(s1)
-        docheck(s2)
-        docheck(s4)
-    });
+    it('Vote', () => {
+        const ACCEPTED_VOTE_SCRIPT = Script.new([PUBKH_BUFFER, cc('VOTE', 'ACCEPTED'), cc('VOTE'), op(OP_CONTENT)])
+        const DECLINED_VOTE_SCRIPT = Script.new([PUBKH_BUFFER, cc('VOTE', 'DECLINED'), cc('VOTE'), op(OP_CONTENT)])
 
+        let testing = newEmptyScriptTesting({
+            type: 4,
+            size: 2,
+            typeString: 'VOTE',
+            is: {
+                content: true,
+                vote: true,
+                contentWithoutAddress: true,
+            },
+            parse: {
+                pubkh: Inv.PubKH.fromHex(PUBKEY_H_BURNER),
+                targetPKH: new Inv.PubKH(PUBKH_BUFFER),
+            },
+        })
 
-    it('Accepted Vote', () => {
-        const ACCEPTED_VOTE_SCRIPT: Uint8Array[] = [PUBKH_BUFFER, cc('VOTE', 'ACCEPTED'), cc('VOTE'), op(OP_CONTENT)]
+        for (let ver = 0; ver <= LAST_TX_VERSION; ver++){
+            testing = Object.assign(testing, {typeD2: 'ACCEPTED', shouldEq: [ACCEPTED_VOTE_SCRIPT], size: 27, str: "PROPOSAL_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae ACCEPTED VOTE OP_CONTENT"})
+            testing.is = Object.assign({}, testing.is, { voteAccepted: true, voteDeclined: false })
+            doTest(Script.build().voteScript(new Inv.PubKH(PUBKH_BUFFER), true), testing, ver as TByte)
+            testing = Object.assign(testing, {typeD2: 'DECLINED', shouldEq: [DECLINED_VOTE_SCRIPT], size: 27, str: "PROPOSAL_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae DECLINED VOTE OP_CONTENT"})
+            testing.is = Object.assign({}, testing.is, { voteAccepted: false, voteDeclined: true })
+            doTest(Script.build().voteScript(new Inv.PubKH(PUBKH_BUFFER), false), testing, ver as TByte)
+        }
+    })
 
-        const s = Script.build().voteScript(new Inv.PubKH(PUBKH_BUFFER), true)
-        expect(s.bytes().toString()).to.eq(ACCEPTED_VOTE_SCRIPT.toString())
-        expect(s.type()).to.eq(4)
-        expect(s.typeString()).to.eq('VOTE')
-        expect(s.typeD2()).to.eq('ACCEPTED')
-        expect(s.fullSizeOctet()).to.eq(27)
-    
-        const parse = s.parse()
-        expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
-        expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-        expect(() => parse.PKHFromContentScript()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
-        expect(parse.targetPKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
+    describe('version 0 -- type testing', () => {
+        it('Lock', () => {
+            const LOCK_SCRIPT = Script.new([op(OP_DUP), op(OP_HASH160), new Inv.InvBuffer([0,1,2,3,4,5,6,7]).bytes(), op(OP_EQUALVERIFY), op(OP_CHECKSIG)])
+            expect(LOCK_SCRIPT.is().lockingScript()).to.eq(false)
+        })
 
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(true)
-        expect(is.proposalScript()).to.eq(false)
-        expect(is.costProposalScript()).to.eq(false)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(true)
-        expect(is.voteAcceptedD2()).to.eq(true)
-        expect(is.voteDeclinedD2()).to.eq(false)
-        expect(is.onlyTargetableContentScript()).to.eq(false)
-        expect(is.onlyTargetingContentScript()).to.eq(true)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(false)
-        expect(is.targetingcript()).to.eq(true)
-        expect(`PROPOSAL_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae ACCEPTED VOTE OP_CONTENT`).to.eq(s.pretty())
+        it('Unlock', () => {
+            const UNLOCK_SCRIPT = Script.new([PUBK_BUFFER, SIGNATURE_BUFFER])
+            expect(UNLOCK_SCRIPT.is().unlockingScript()).to.eq(false)
+        })
 
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(true)
-        expect(s.has().d3()).to.eq(false)
+        it('Application Proposal', () => {
+            const APPLICATION_PROPOSAL_SCRIPT_1 = Script.new([NONCE.bytes('int8').bytes(), PUBKH_BUFFER, cc('PROPOSAL', 'APPLICATION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const APPLICATION_PROPOSAL_SCRIPT_2 = Script.new([NONCE.bytes('int16').bytes(), PUBKH_BUFFER, cc('PROPOSAL', 'APPLICATION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const APPLICATION_PROPOSAL_SCRIPT_3 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, cc('PROPOSAL', 'APPLICATION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const APPLICATION_PROPOSAL_SCRIPT_4 = Script.new([NONCE.bytes('int64').bytes(), PUBKH_BUFFER, cc('PROPOSAL', 'APPLICATION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const APPLICATION_PROPOSAL_SCRIPT_5 = Script.new([NONCE.bytes('int32').bytes(), new Inv.InvBuffer([0,1,2,3,4,5,6,7]).bytes(), cc('PROPOSAL', 'APPLICATION'), cc('PROPOSAL'), op(OP_CONTENT)])
 
-    });
+            expect(APPLICATION_PROPOSAL_SCRIPT_1.is().applicationProposalScript()).to.eq(false)
+            expect(APPLICATION_PROPOSAL_SCRIPT_2.is().applicationProposalScript()).to.eq(false)
+            expect(APPLICATION_PROPOSAL_SCRIPT_3.is().applicationProposalScript()).to.eq(true)
+            expect(APPLICATION_PROPOSAL_SCRIPT_4.is().applicationProposalScript()).to.eq(true)
+            expect(APPLICATION_PROPOSAL_SCRIPT_5.is().applicationProposalScript()).to.eq(false)
+            expect(APPLICATION_PROPOSAL_SCRIPT_3.fullSizeOctet()).to.eq(32)
+            expect(APPLICATION_PROPOSAL_SCRIPT_4.fullSizeOctet()).to.eq(36)
+        })
 
-    it('Declined Vote', () => {
-        const DECLINED_VOTE_SCRIPT: Uint8Array[] = [PUBKH_BUFFER, cc('VOTE', 'DECLINED'), cc('VOTE'), op(OP_CONTENT)]
+        it('Costs Proposal', () => {
+            const COST_PROPOSAL_SCRIPT_1 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  PROPOSAL_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const COST_PROPOSAL_SCRIPT_2 = Script.new([NONCE.bytes('int64').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  PROPOSAL_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const COST_PROPOSAL_SCRIPT_3 = Script.new([NONCE.bytes('int16').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  PROPOSAL_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const COST_PROPOSAL_SCRIPT_4 = Script.new([NONCE.bytes('int8').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  PROPOSAL_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const COST_PROPOSAL_SCRIPT_5 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int32').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  PROPOSAL_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const COST_PROPOSAL_SCRIPT_6 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  PROPOSAL_PRICE.bytes('int32').bytes(), cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const COST_PROPOSAL_SCRIPT_7 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, THREAD_PRICE.bytes('int64').bytes(), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'), op(0),  cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
 
-        const s = Script.build().voteScript(new Inv.PubKH(PUBKH_BUFFER), false)
-        expect(s.bytes().toString()).to.eq(DECLINED_VOTE_SCRIPT.toString())
-        expect(s.type()).to.eq(4)
-        expect(s.typeString()).to.eq('VOTE')
-        expect(s.typeD2()).to.eq('DECLINED')
-        expect(s.fullSizeOctet()).to.eq(27)
-    
-        const parse = s.parse()
-        expect(() => parse.contentNonce()).to.throw(NOT_A_TARGETABLE_CONTENT)
-        expect(parse.PKHFromLockScript().to().string().hex()).to.eq(PUBKEY_H_BURNER)
-        expect(() => parse.PKHFromContentScript()).to.throw(NOT_A_TARGETABLE_CONTENT.message)
-        expect(parse.targetPKHFromContentScript().bytes()).to.eq(PUBKH_BUFFER)
-        expect(() => parse.constitution()).to.throw(NOT_A_CONSTITUTION_PROPOSAL.message)
-        expect(() => parse.proposalCosts()).to.throw(NOT_A_COST_PROPOSAL.message)
-        expect(() => parse.distributionVout()).to.throw(NOT_A_REWARD_SCRIPT.message)
+            expect(COST_PROPOSAL_SCRIPT_1.is().costProposalScript()).to.eq(true)
+            expect(COST_PROPOSAL_SCRIPT_2.is().costProposalScript()).to.eq(true)
+            expect(COST_PROPOSAL_SCRIPT_3.is().costProposalScript()).to.eq(false)
+            expect(COST_PROPOSAL_SCRIPT_4.is().costProposalScript()).to.eq(false)
+            expect(COST_PROPOSAL_SCRIPT_5.is().costProposalScript()).to.eq(false)
+            expect(COST_PROPOSAL_SCRIPT_6.is().costProposalScript()).to.eq(false)
+            expect(COST_PROPOSAL_SCRIPT_7.is().costProposalScript()).to.eq(false)
+        })
 
-        const is = s.is()
-        expect(is.lockingScript()).to.eq(false)
-        expect(is.unlockingScript()).to.eq(false)
-        expect(is.contentScript()).to.eq(true)
-        expect(is.proposalScript()).to.eq(false)
-        expect(is.costProposalScript()).to.eq(false)
-        expect(is.applicationProposalScript()).to.eq(false)
-        expect(is.constitutionProposalScript()).to.eq(false)
-        expect(is.threadD1Script()).to.eq(false)
-        expect(is.threadD2Script()).to.eq(false)
-        expect(is.rethreadD2Script()).to.eq(false)
-        expect(is.rewardScript()).to.eq(false)
-        expect(is.voteScript()).to.eq(true)
-        expect(is.voteAcceptedD2()).to.eq(false)
-        expect(is.voteDeclinedD2()).to.eq(true)
-        expect(is.onlyTargetableContentScript()).to.eq(false)
-        expect(is.onlyTargetingContentScript()).to.eq(true)
-        expect(is.targetingAndTargetableContentScript()).to.eq(false)
-        expect(is.targetableScript()).to.eq(false)
-        expect(is.targetingcript()).to.eq(true)
-        expect(`PROPOSAL_PKH:93ce48570b55c42c2af816aeaba06cfee1224fae DECLINED VOTE OP_CONTENT`).to.eq(s.pretty())
+        it('Constitution Proposal', () => {
+            const CONSTITUTION_PROPOSAL_SCRIPT_1 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, SerializeConstitution(NewConstitution()).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const CONSTITUTION_PROPOSAL_SCRIPT_2 = Script.new([NONCE.bytes('int64').bytes(), PUBKH_BUFFER, SerializeConstitution(NewConstitution()).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const CONSTITUTION_PROPOSAL_SCRIPT_3 = Script.new([NONCE.bytes('int16').bytes(), PUBKH_BUFFER, SerializeConstitution(NewConstitution()).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            const CONSTITUTION_PROPOSAL_SCRIPT_4 = Script.new([NONCE.bytes('int8').bytes(), PUBKH_BUFFER, SerializeConstitution(NewConstitution()).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
+           
+            expect(CONSTITUTION_PROPOSAL_SCRIPT_1.is().constitutionProposalScript()).to.eq(true)
+            expect(CONSTITUTION_PROPOSAL_SCRIPT_2.is().constitutionProposalScript()).to.eq(true)
+            expect(CONSTITUTION_PROPOSAL_SCRIPT_3.is().constitutionProposalScript()).to.eq(false)
+            expect(CONSTITUTION_PROPOSAL_SCRIPT_4.is().constitutionProposalScript()).to.eq(false)
+            
+            let consti = NewConstitution()
+            const CONSTITUTION_PROPOSAL_SCRIPT_5 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, SerializeConstitution(consti).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
 
-        expect(s.copy().eq(s)).to.eq(true)
-        expect(Script.fromBase64(s.base64()).eq(s)).to.eq(true)
-        expect(Script.fromArrayBytes(s.bytes()).eq(s)).to.eq(true)
-        expect(s.has().d2()).to.eq(true)
-        expect(s.has().d3()).to.eq(false)
-    });
+            expect(CONSTITUTION_PROPOSAL_SCRIPT_5.is().constitutionProposalScript()).to.eq(true)
+        })
 
-
+    }) 
 
 })

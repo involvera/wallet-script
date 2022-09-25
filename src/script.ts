@@ -357,7 +357,7 @@ export default class Script extends Array<Command> {
 
         const applicationProposalScript = (): boolean => {
             try {
-                return this.is().proposalScript() &&
+                return proposalScript() &&
                 this.length === Script.sizes().APPLICATION_PROPOSAL &&
                 this[2].getCodeAs().content('PROPOSAL').eq('PROPOSAL', 'APPLICATION')
             } catch (e){
@@ -367,7 +367,7 @@ export default class Script extends Array<Command> {
 
         const costProposalScript = (): boolean => {
             try {
-                if (this.is().proposalScript() && this.length === Script.sizes().COST_PROPOSAL_MIN || this.length === Script.sizes().COST_PROPOSAL_MAX){
+                if (proposalScript() && (this.length >= Script.sizes().COST_PROPOSAL_MIN && this.length <= Script.sizes().COST_PROPOSAL_MAX)){
                     let i = 2
                     while (isValidAmount(this[i]) && !!this[i+1].getCodeAs().content('PROPOSAL', 'COSTS'))
                         i += 2
@@ -381,7 +381,7 @@ export default class Script extends Array<Command> {
 
         const constitutionProposalScript = (): boolean => {
             try {
-                return this.is().proposalScript() &&
+                return proposalScript() &&
                 this.length === Script.sizes().CONSTITUTION_PROPOSAL &&
                 this[2].constitution().length === MAX_CONSTITUTION_RULE
             } catch (e){
@@ -527,7 +527,7 @@ export default class Script extends Array<Command> {
                         i += 2
                     }
                 } else if (this.is().constitutionProposalScript()){
-                    str += `CONSTITUTION:${JSON.stringify(this[i].constitution())}`
+                    str += `CONSTITUTION:${JSON.stringify(this[i].constitution())} `
                     i++
                 }
                 str += `${contentCode(i, ['PROPOSAL'])} `
