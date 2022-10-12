@@ -349,6 +349,7 @@ export default class Script extends Array<Command> {
                 return contentWithAddress() &&
                 this.length >= Script.sizes().APPLICATION_PROPOSAL &&
                 this.length <= Script.sizes().COST_PROPOSAL_MAX && 
+                !!this[this.length - 3].getCodeAs().content('PROPOSAL') &&
                 this[this.length - 2].getCodeAs().content().eq('PROPOSAL')
             } catch (e){
                 return false
@@ -371,7 +372,7 @@ export default class Script extends Array<Command> {
                     let i = 2
                     while (isValidAmount(this[i]) && !!this[i+1].getCodeAs().content('PROPOSAL', 'COSTS'))
                         i += 2
-                    return this[i].getCodeAs().content('PROPOSAL').eq('PROPOSAL', 'COSTS')
+                    return (i === 4 || i === 6) && this[i].getCodeAs().content('PROPOSAL').eq('PROPOSAL', 'COSTS')
                 }
                 return false
             } catch (e){

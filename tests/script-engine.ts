@@ -515,6 +515,9 @@ describe('Testing script-engine', () => {
             expect(COST_PROPOSAL_SCRIPT_5.is().costProposalScript()).to.eq(false)
             expect(COST_PROPOSAL_SCRIPT_6.is().costProposalScript()).to.eq(false)
             expect(COST_PROPOSAL_SCRIPT_7.is().costProposalScript()).to.eq(false)
+
+            const WRONG_COST_PROPOSAL_SCRIPT = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER,  cc('PROPOSAL', 'COSTS', 'PROPOSAL_PRICE'), cc('PROPOSAL', 'COSTS', 'THREAD_PRICE'),  cc('PROPOSAL', 'COSTS'), cc('PROPOSAL'), op(OP_CONTENT)])
+            expect(WRONG_COST_PROPOSAL_SCRIPT.is().costProposalScript()).to.eq(false)
         })
 
         it('Constitution Proposal', () => {
@@ -528,12 +531,96 @@ describe('Testing script-engine', () => {
             expect(CONSTITUTION_PROPOSAL_SCRIPT_3.is().constitutionProposalScript()).to.eq(false)
             expect(CONSTITUTION_PROPOSAL_SCRIPT_4.is().constitutionProposalScript()).to.eq(false)
             
-            let consti = NewConstitution()
-            const CONSTITUTION_PROPOSAL_SCRIPT_5 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, SerializeConstitution(consti).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
-
-            expect(CONSTITUTION_PROPOSAL_SCRIPT_5.is().constitutionProposalScript()).to.eq(true)
+            let serial: string = ''
+            let char = 'A'
+            for (let i = 0; i < 9; i++){
+                serial += char
+                serial += char+1
+                char += 2
+            }
+            const CONSTITUTION_PROPOSAL_SCRIPT_5 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, Inv.InvBuffer.fromRaw(serial).bytes(), cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            expect(CONSTITUTION_PROPOSAL_SCRIPT_5.is().constitutionProposalScript()).to.eq(false)
         })
 
-    }) 
+        it('Unregistered Proposal', () => {
+            const FAKE_PROPOSAL_SCRIPT_1 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, new Uint8Array([4]), cc('PROPOSAL'), op(OP_CONTENT)])
+            const FAKE_PROPOSAL_SCRIPT_2 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, cc('PROPOSAL', 'CONSTITUTION'), cc('PROPOSAL'), op(OP_CONTENT)])
+            expect(FAKE_PROPOSAL_SCRIPT_1.is().proposalScript()).to.eq(false)
+            expect(FAKE_PROPOSAL_SCRIPT_2.is().proposalScript()).to.eq(true)
+            expect(FAKE_PROPOSAL_SCRIPT_2.is().constitutionProposalScript()).to.eq(false)
+        })
 
+        it('(Re)Thread', () => { 
+            const THREAD_SCRIPT_1 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)])
+            const THREAD_SCRIPT_2 = Script.new([NONCE.bytes('int64').bytes(), PUBKH_BUFFER, cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)])
+            const THREAD_SCRIPT_3 = Script.new([NONCE.bytes('int16').bytes(), PUBKH_BUFFER, cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)])
+            const THREAD_SCRIPT_4 = Script.new([NONCE.bytes('int8').bytes(), PUBKH_BUFFER, cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)])
+            
+            expect(THREAD_SCRIPT_1.is().ThreadOnlyScript()).to.eq(true)
+            expect(THREAD_SCRIPT_2.is().ThreadOnlyScript()).to.eq(true)
+            expect(THREAD_SCRIPT_3.is().ThreadOnlyScript()).to.eq(false)
+            expect(THREAD_SCRIPT_4.is().ThreadOnlyScript()).to.eq(false)
+
+            const RETHREAD_SCRIPT_1 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, PUBKH_BUFFER, cc('THREAD', 'RETHREAD'), cc('THREAD'), op(OP_CONTENT)])
+            const RETHREAD_SCRIPT_2 = Script.new([NONCE.bytes('int64').bytes(), PUBKH_BUFFER, PUBKH_BUFFER, cc('THREAD', 'RETHREAD'), cc('THREAD'), op(OP_CONTENT)])
+            const RETHREAD_SCRIPT_3 = Script.new([NONCE.bytes('int16').bytes(), PUBKH_BUFFER, PUBKH_BUFFER, cc('THREAD', 'RETHREAD'), cc('THREAD'), op(OP_CONTENT)])
+            const RETHREAD_SCRIPT_4 = Script.new([NONCE.bytes('int8').bytes(), PUBKH_BUFFER, PUBKH_BUFFER, cc('THREAD', 'RETHREAD'), cc('THREAD'), op(OP_CONTENT)])
+
+            expect(RETHREAD_SCRIPT_1.is().RethreadOnlyScript()).to.eq(true)
+            expect(RETHREAD_SCRIPT_2.is().RethreadOnlyScript()).to.eq(true)
+            expect(RETHREAD_SCRIPT_3.is().RethreadOnlyScript()).to.eq(false)
+            expect(RETHREAD_SCRIPT_4.is().RethreadOnlyScript()).to.eq(false)
+
+            const WRONG_THREAD_SCRIPT_1 = Script.new([NONCE.bytes('int32').bytes(), PUBKH_BUFFER, new Uint8Array([3]), cc('THREAD'), op(OP_CONTENT)])
+            expect(WRONG_THREAD_SCRIPT_1.is().threadOrRethreadScript()).to.eq(false)
+            const WRONG_THREAD_SCRIPT_2 = Script.new([NONCE.bytes('int32').bytes(), new Uint8Array([1,2,3,4,5,6,35,43,1,12]), cc('THREAD', 'THREAD'), cc('THREAD'), op(OP_CONTENT)])
+            expect(WRONG_THREAD_SCRIPT_2.is().threadOrRethreadScript()).to.eq(false)
+            const WRONG_RETHREAD_SCRIPT_1 = Script.new([NONCE.bytes('int32').bytes(), new Uint8Array([1,2,3,4,5,6,35,43,1,12]), PUBKH_BUFFER, cc('THREAD', 'RETHREAD'), cc('THREAD'), op(OP_CONTENT)])
+            expect(WRONG_RETHREAD_SCRIPT_1.is().threadOrRethreadScript()).to.eq(false)
+        })
+
+        it('Reward', () => { 
+            const REWARD_1 = Script.new([PUBKH_BUFFER, VOUT.bytes('int8').bytes(), cc('REWARD'), op(OP_CONTENT)])
+            const REWARD_2 = Script.new([PUBKH_BUFFER, VOUT.bytes('int16').bytes(), cc('REWARD'), op(OP_CONTENT)])
+            const REWARD_3 = Script.new([PUBKH_BUFFER, VOUT.bytes('int32').bytes(), cc('REWARD'), op(OP_CONTENT)])
+            const REWARD_4 = Script.new([PUBKH_BUFFER, VOUT.bytes('int64').bytes(), cc('REWARD'), op(OP_CONTENT)])
+
+            expect(REWARD_1.is().rewardScript(0)).to.eq(true)
+            expect(REWARD_2.is().rewardScript(0)).to.eq(true)
+            expect(REWARD_3.is().rewardScript(0)).to.eq(true)
+            expect(REWARD_4.is().rewardScript(0)).to.eq(true)
+
+            const WRONG_REWARD_1 = Script.new([PUBKH_BUFFER, new Uint8Array([1,2,3,4,5,6,7,8,9]), cc('REWARD'), op(OP_CONTENT)])
+            expect(WRONG_REWARD_1.is().rewardScript(0)).to.eq(false)
+            const WRONG_REWARD_2 = Script.new([new Uint8Array([1,2,3,4,5,6,7]), VOUT.bytes('int16').bytes(), cc('REWARD'), op(OP_CONTENT)])
+            expect(WRONG_REWARD_2.is().rewardScript(0)).to.eq(false)
+        })
+
+        it('Vote', () => {
+            const WRONG_VOTE_SCRIPT_1 = Script.new([PUBKH_BUFFER, new Uint8Array([3]), cc('VOTE'), op(OP_CONTENT)])
+            expect(WRONG_VOTE_SCRIPT_1.is().voteScript()).to.eq(false)
+            const WRONG_VOTE_SCRIPT_2 = Script.new([new Uint8Array([1,2,3,4,5,6,7]), new Uint8Array([2]), cc('VOTE'), op(OP_CONTENT)])
+            expect(WRONG_VOTE_SCRIPT_2.is().voteDeclinedD2()).to.eq(false)
+        })
+    })
+
+    describe('version 1 -- type testing', () => {
+
+        it('Reward', () => { 
+            const REWARD_1 = Script.new([PUBKH_BUFFER, VOUT.bytes('int8').bytes(), cc('REWARD'), op(OP_CONTENT)])
+            const REWARD_2 = Script.new([PUBKH_BUFFER, VOUT.bytes('int16').bytes(), cc('REWARD'), op(OP_CONTENT)])
+            const REWARD_3 = Script.new([PUBKH_BUFFER, VOUT.bytes('int32').bytes(), cc('REWARD'), op(OP_CONTENT)])
+            const REWARD_4 = Script.new([PUBKH_BUFFER, VOUT.bytes('int64').bytes(), cc('REWARD'), op(OP_CONTENT)])
+
+            expect(REWARD_1.is().rewardScript(1)).to.eq(false)
+            expect(REWARD_2.is().rewardScript(1)).to.eq(true)
+            expect(REWARD_3.is().rewardScript(1)).to.eq(true)
+            expect(REWARD_4.is().rewardScript(1)).to.eq(true)
+
+            const WRONG_REWARD_1 = Script.new([PUBKH_BUFFER, new Uint8Array([1,2,3,4,5,6,7,8,9]), cc('REWARD'), op(OP_CONTENT)])
+            expect(WRONG_REWARD_1.is().rewardScript(1)).to.eq(false)
+            const WRONG_REWARD_2 = Script.new([new Uint8Array([1,2,3,4,5,6,7]), VOUT.bytes('int16').bytes(), cc('REWARD'), op(OP_CONTENT)])
+            expect(WRONG_REWARD_2.is().rewardScript(1)).to.eq(false)
+        })
+    })
 })
